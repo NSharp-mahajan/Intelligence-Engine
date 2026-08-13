@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# build/Next.js
+.next/
+dist/
+out/
+build/
+
+# env
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
