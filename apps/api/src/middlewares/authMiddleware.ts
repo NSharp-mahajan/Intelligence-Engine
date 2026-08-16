@@ -1,29 +1,40 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import { prisma } from '../lib/prisma';
 
 export interface AuthRequest extends Request {
   userId?: string;
 }
 
-export const requireAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const token = req.cookies?.token;
+export const requireAuth = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const sessionId = req.cookies?.sessionId;
 
-  if (!token) {
-    res.status(401).json({ error: 'Unauthorized: No token provided' });
+  if (!sessionId) {
+    res.status(401).json({ error: 'Unauthorized: No session provided' });
     return;
   }
 
   try {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      throw new Error('JWT_SECRET is not configured');
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      res.status(401).json({ error: 'Unauthorized: Invalid session' });
+      return;
     }
 
-    const decoded = jwt.verify(token, secret) as { userId: string };
-    req.userId = decoded.userId;
+    if (session.expiresAt < new Date()) {
+      await prisma.session.delete({ where: { id: sessionId } });
+      res.clearCookie('sessionId');
+      res.status(401).json({ error: 'Unauthorized: Session expired' });
+      return;
+    }
+
+    req.userId = session.userId;
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
+    console.error('Session validation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
     return;
   }
 };

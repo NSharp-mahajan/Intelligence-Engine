@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middlewares/authMiddleware';
@@ -11,7 +10,6 @@ const router = Router();
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8, 'Password must be at least 8 characters long'),
-  fullName: z.string().min(1, 'Full name is required'),
 });
 
 const loginSchema = z.object({
@@ -35,10 +33,11 @@ router.post('/register', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'Invalid input', details: parsed.error.format() });
       return;
     }
-    const { email, password, fullName } = parsed.data;
+    const { email, password } = parsed.data;
+    const normalizedEmail = email.toLowerCase();
 
     // Check if user exists
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existingUser) {
       res.status(400).json({ error: 'User with this email already exists' });
       return;
@@ -48,34 +47,30 @@ router.post('/register', async (req: Request, res: Response) => {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // Create User and Profile in a transaction
+    // Create User (NO Profile creation)
     const user = await prisma.user.create({
       data: {
-        email,
+        email: normalizedEmail,
         passwordHash,
-        profile: {
-          create: {
-            fullName,
-          },
-        },
-      },
-      include: {
-        profile: true,
       },
     });
 
-    // Create session (JWT)
-    const secret = process.env.JWT_SECRET!;
-    const token = jwt.sign({ userId: user.id }, secret, { expiresIn: '7d' });
+    // Create session in DB
+    const expiresAt = new Date(Date.now() + cookieOptions.maxAge);
+    const session = await prisma.session.create({
+      data: {
+        userId: user.id,
+        expiresAt,
+      },
+    });
 
     // Set cookie
-    res.cookie('token', token, cookieOptions);
+    res.cookie('sessionId', session.id, cookieOptions);
 
     // Return safe user data
     res.status(201).json({
       id: user.id,
       email: user.email,
-      profile: user.profile,
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -92,10 +87,11 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
     const { email, password } = parsed.data;
+    const normalizedEmail = email.toLowerCase();
 
     // Find user
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
       include: { profile: true },
     });
     if (!user) {
@@ -110,12 +106,17 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    // Create session (JWT)
-    const secret = process.env.JWT_SECRET!;
-    const token = jwt.sign({ userId: user.id }, secret, { expiresIn: '7d' });
+    // Create session in DB
+    const expiresAt = new Date(Date.now() + cookieOptions.maxAge);
+    const session = await prisma.session.create({
+      data: {
+        userId: user.id,
+        expiresAt,
+      },
+    });
 
     // Set cookie
-    res.cookie('token', token, cookieOptions);
+    res.cookie('sessionId', session.id, cookieOptions);
 
     // Return safe user data
     res.json({
@@ -154,8 +155,18 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/auth/logout
-router.post('/logout', (req: Request, res: Response) => {
-  res.clearCookie('token', { ...cookieOptions, maxAge: 0 });
+router.post('/logout', async (req: Request, res: Response) => {
+  const sessionId = req.cookies?.sessionId;
+  
+  if (sessionId) {
+    try {
+      await prisma.session.delete({ where: { id: sessionId } });
+    } catch (error) {
+      // Ignore if session already doesn't exist
+    }
+  }
+
+  res.clearCookie('sessionId', { ...cookieOptions, maxAge: 0 });
   res.json({ message: 'Logged out successfully' });
 });
 

@@ -7,12 +7,13 @@ generator client {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
+  id           String    @id @default(uuid())
+  email        String    @unique
   passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
   profile      Profile?
+  sessions     Session[]
 }
 
 model Profile {
@@ -120,4 +121,14 @@ model OpportunitySkill {
   skill           Skill           @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
   @@id([opportunityId, skillId])
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
