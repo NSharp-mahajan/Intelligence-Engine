@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { fetchApi } from '../../lib/api';
+import { fetchApi } from '../../../lib/api';
 
 export default function ProfilePage() {
   const router = useRouter();

@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { fetchApi } from '../../lib/api';
+import { fetchApi } from '../../../lib/api';
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,10 +17,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await fetchApi('/auth/login', {
+      await fetchApi('/auth/register', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
+      // Registered & logged in successfully, now redirect to onboarding
       router.push('/onboarding');
     } catch (err: any) {
       setError(err.message);
@@ -32,7 +33,7 @@ export default function LoginPage() {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <h1 style={styles.title}>Welcome back</h1>
+        <h1 style={styles.title}>Create your account</h1>
         {error && <div style={styles.error}>{error}</div>}
         <form onSubmit={handleSubmit} style={styles.form}>
           <div style={styles.field}>
@@ -50,17 +51,18 @@ export default function LoginPage() {
             <input
               type="password"
               required
+              minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               style={styles.input}
             />
           </div>
           <button type="submit" disabled={loading} style={styles.button}>
-            {loading ? 'Logging in...' : 'Log In'}
+            {loading ? 'Creating account...' : 'Register'}
           </button>
         </form>
         <p style={styles.linkText}>
-          Don't have an account? <a href="/register" style={styles.link}>Register</a>
+          Already have an account? <a href="/login" style={styles.link}>Log in</a>
         </p>
       </div>
     </div>
@@ -134,7 +136,7 @@ const styles = {
     fontSize: '0.875rem',
   },
   link: {
-    color: '#ea580c',
+    color: '#ea580c', // Orange accent
     textDecoration: 'none',
     fontWeight: '600',
   }
