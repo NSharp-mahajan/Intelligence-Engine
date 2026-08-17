@@ -115,8 +115,14 @@ const styles = {
   },
   button: {
     padding: '0.75rem',
-    backgroundColor: '#0ea5e9', // Using a nice accent, user said "green/orange functional accents, no blue SaaS theme", wait!
-    // "no blue primary SaaS theme", "green/orange functional accents". I will use orange/green!
+    backgroundColor: '#ea580c', // Orange
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '1rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    marginTop: '0.5rem',
   },
   error: {
     color: '#dc2626',
@@ -134,17 +140,4 @@ const styles = {
     textDecoration: 'none',
     fontWeight: '600',
   }
-};
-
-// Fix the button color to strictly follow design direction
-styles.button = {
-  ...styles.button,
-  backgroundColor: '#ea580c', // Orange
-  color: '#fff',
-  border: 'none',
-  borderRadius: '8px',
-  fontSize: '1rem',
-  fontWeight: '600',
-  cursor: 'pointer',
-  marginTop: '0.5rem',
 };
