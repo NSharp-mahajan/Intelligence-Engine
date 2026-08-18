@@ -18,7 +18,8 @@ export async function fetchApi(endpoint: string, options: RequestInit = {}) {
   }
 
   if (!res.ok) {
-    throw new Error(data?.error || 'An unexpected error occurred');
+    const errorMsg = data?.error?.message || data?.error || 'An unexpected error occurred';
+    throw new Error(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
   }
 
   return data;

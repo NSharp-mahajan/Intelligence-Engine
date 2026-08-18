@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchApi } from '../../../lib/api';
+import { Button } from '../../../components/ui/Button';
+import { Input } from '../../../components/ui/Input';
+import { Card, CardBody } from '../../../components/ui/Card';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -10,7 +13,9 @@ export default function OnboardingPage() {
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [step, setStep] = useState(1);
+
+  const [hasExistingProfile, setHasExistingProfile] = useState(false);
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -23,15 +28,12 @@ export default function OnboardingPage() {
   });
 
   useEffect(() => {
-    // 1. Check auth and existing profile
     async function init() {
       try {
-        // me
         await fetchApi('/auth/me');
-        
-        // profile
         const { profile } = await fetchApi('/profile');
         if (profile) {
+          setHasExistingProfile(true);
           setFormData({
             fullName: profile.fullName || '',
             university: profile.university || '',
@@ -62,15 +64,15 @@ export default function OnboardingPage() {
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess(false);
-    setSubmitting(true);
+  const handleNext = () => setStep(s => Math.min(s + 1, 4));
+  const handleBack = () => setStep(s => Math.max(s - 1, 1));
 
+  const handleSubmit = async () => {
+    setError('');
+    setSubmitting(true);
     try {
       await fetchApi('/profile', {
-        method: 'PATCH',
+        method: hasExistingProfile ? 'PUT' : 'POST',
         body: JSON.stringify({
           ...formData,
           githubUrl: formData.githubUrl || undefined,
@@ -78,227 +80,274 @@ export default function OnboardingPage() {
           portfolioUrl: formData.portfolioUrl || undefined,
         }),
       });
-      setSuccess(true);
-      setTimeout(() => {
-        router.push('/profile');
-      }, 1000);
+      router.push('/portal');
     } catch (err: any) {
-      setError(err.message || 'Failed to save profile. Please check your inputs.');
-    } finally {
+      setError(err.message || 'Failed to save profile.');
       setSubmitting(false);
     }
   };
 
   if (loadingInitial) {
     return (
-      <div style={styles.container}>
-        <div style={styles.loading}>Loading...</div>
+      <div style={styles.loadingContainer}>
+        <div style={styles.spinner}>Loading workspace...</div>
       </div>
     );
   }
 
+  const steps = [
+    { num: '01', title: 'Identity' },
+    { num: '02', title: 'Career Direction' },
+    { num: '03', title: 'Evidence' },
+    { num: '04', title: 'Skills' },
+  ];
+
   return (
     <div style={styles.container}>
-      <div style={styles.card}>
-        <h1 style={styles.title}>Tell us about yourself</h1>
+      <div style={styles.content}>
         
-        {error && <div style={styles.error}>{error}</div>}
-        {success && <div style={styles.success}>Profile saved successfully! Redirecting...</div>}
+        <div style={styles.header}>
+          <h1 style={styles.title}>Build your foundation</h1>
+          <p style={styles.subtitle}>Let's establish your professional identity to begin matching.</p>
+        </div>
 
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <div style={styles.section}>
-            <div style={styles.field}>
-              <label style={styles.label}>Full Name *</label>
-              <input
-                name="fullName"
-                required
-                value={formData.fullName}
-                onChange={handleChange}
-                style={styles.input}
-                placeholder="Jane Doe"
-              />
-            </div>
-
-            <div style={styles.field}>
-              <label style={styles.label}>University *</label>
-              <input
-                name="university"
-                required
-                value={formData.university}
-                onChange={handleChange}
-                style={styles.input}
-                placeholder="State University"
-              />
-            </div>
-
-            <div style={styles.fieldRow}>
-              <div style={styles.field}>
-                <label style={styles.label}>Graduation Year *</label>
-                <input
-                  name="graduationYear"
-                  type="number"
-                  min="1950"
-                  max="2100"
-                  required
-                  value={formData.graduationYear}
-                  onChange={handleChange}
-                  style={styles.input}
-                />
-              </div>
-
-              <div style={styles.field}>
-                <label style={styles.label}>Target Role *</label>
-                <input
-                  name="targetRole"
-                  required
-                  value={formData.targetRole}
-                  onChange={handleChange}
-                  style={styles.input}
-                  placeholder="Software Engineer"
-                />
-              </div>
-            </div>
+        {/* Progress Indicator */}
+        <div style={styles.progressContainer}>
+          <div style={styles.progressCounter}>0{step} / 04</div>
+          <div style={styles.progressTrack}>
+            <div style={{ ...styles.progressFill, width: `${(step / 4) * 100}%` }} />
           </div>
-
-          <div style={styles.sectionTitle}>Optional Links</div>
-          <div style={styles.section}>
-            <div style={styles.field}>
-              <label style={styles.label}>GitHub</label>
-              <input
-                name="githubUrl"
-                type="url"
-                value={formData.githubUrl}
-                onChange={handleChange}
-                style={styles.input}
-                placeholder="https://github.com/username"
-              />
-            </div>
-
-            <div style={styles.field}>
-              <label style={styles.label}>LinkedIn</label>
-              <input
-                name="linkedinUrl"
-                type="url"
-                value={formData.linkedinUrl}
-                onChange={handleChange}
-                style={styles.input}
-                placeholder="https://linkedin.com/in/username"
-              />
-            </div>
-
-            <div style={styles.field}>
-              <label style={styles.label}>Portfolio</label>
-              <input
-                name="portfolioUrl"
-                type="url"
-                value={formData.portfolioUrl}
-                onChange={handleChange}
-                style={styles.input}
-                placeholder="https://yourwebsite.com"
-              />
-            </div>
+          <div style={styles.progressLabels}>
+            {steps.map((s, i) => (
+              <span key={s.num} style={step >= i + 1 ? styles.progressLabelActive : styles.progressLabel}>
+                {s.title}
+              </span>
+            ))}
           </div>
+        </div>
 
-          <button type="submit" disabled={submitting || success} style={styles.button}>
-            {submitting ? 'Saving...' : 'Continue'}
-          </button>
-        </form>
+        <Card>
+          <CardBody style={{ padding: '2.5rem' }}>
+            {error && <div style={styles.errorAlert}>{error}</div>}
+
+            {step === 1 && (
+              <div style={styles.stepContainer}>
+                <h2 style={styles.stepTitle}>Core Identity</h2>
+                <p style={styles.stepSubtitle}>How should employers address you and what is your academic background?</p>
+                <div style={styles.formGrid}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <Input label="Full Name" name="fullName" required value={formData.fullName} onChange={handleChange} placeholder="Jane Doe" />
+                  </div>
+                  <Input label="University" name="university" required value={formData.university} onChange={handleChange} placeholder="State University" />
+                  <Input label="Graduation Year" name="graduationYear" type="number" required value={formData.graduationYear} onChange={handleChange} />
+                </div>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div style={styles.stepContainer}>
+                <h2 style={styles.stepTitle}>Career Direction</h2>
+                <p style={styles.stepSubtitle}>What role are you actively preparing for?</p>
+                <div style={styles.formGrid}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <Input label="Target Role" name="targetRole" required value={formData.targetRole} onChange={handleChange} placeholder="e.g. Frontend Engineer, Product Manager" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div style={styles.stepContainer}>
+                <h2 style={styles.stepTitle}>Professional Evidence (Optional)</h2>
+                <p style={styles.stepSubtitle}>Links to your public work. The matching engine relies heavily on tangible evidence.</p>
+                <div style={styles.formGrid}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <Input label="GitHub Profile" name="githubUrl" type="url" value={formData.githubUrl} onChange={handleChange} placeholder="https://github.com/username" />
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <Input label="LinkedIn Profile" name="linkedinUrl" type="url" value={formData.linkedinUrl} onChange={handleChange} placeholder="https://linkedin.com/in/username" />
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <Input label="Portfolio Website" name="portfolioUrl" type="url" value={formData.portfolioUrl} onChange={handleChange} placeholder="https://yourwebsite.com" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {step === 4 && (
+              <div style={styles.stepContainer}>
+                <h2 style={styles.stepTitle}>Skills & Background</h2>
+                <p style={styles.stepSubtitle}>Establish the technical foundation you bring to the table.</p>
+                
+                <div style={styles.infoBox}>
+                  <strong style={{ display: 'block', marginBottom: '0.5rem', color: '#1a1a1a' }}>Notice: Pending Backend Integration</strong>
+                  <p style={{ margin: 0, color: '#52525b', fontSize: '0.875rem', lineHeight: 1.5 }}>
+                    The backend API schema for individual CandidateSkill extraction and mapping is currently being developed. 
+                    Once deployed, you will be able to granularly select your languages, frameworks, and proficiencies here. 
+                  </p>
+                </div>
+                
+                <p style={{ marginTop: '2rem', fontSize: '1rem', fontWeight: 600, color: '#1a1a1a', textAlign: 'center' }}>
+                  Your foundation is ready.
+                </p>
+              </div>
+            )}
+
+            <div style={styles.buttonContainer}>
+              {step > 1 ? (
+                <Button variant="outline" type="button" onClick={handleBack}>Back</Button>
+              ) : <div />}
+              
+              {step < 4 ? (
+                <Button 
+                  variant="primary"
+                  type="button" 
+                  onClick={handleNext} 
+                  disabled={
+                    (step === 1 && (!formData.fullName || !formData.university)) ||
+                    (step === 2 && !formData.targetRole)
+                  }
+                >
+                  Save & Continue
+                </Button>
+              ) : (
+                <Button variant="primary" type="button" onClick={handleSubmit} disabled={submitting}>
+                  {submitting ? 'Preparing portal...' : 'Continue to Career Intelligence'}
+                </Button>
+              )}
+            </div>
+          </CardBody>
+        </Card>
       </div>
     </div>
   );
 }
 
 const styles = {
-  container: {
+  loadingContainer: {
     display: 'flex',
     minHeight: '100vh',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#faf9f6',
-    color: '#1a1a1a',
-    fontFamily: 'system-ui, sans-serif',
-    padding: '2rem',
   },
-  card: {
+  spinner: {
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    color: '#a1a1aa',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+  },
+  container: {
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '4rem 2rem',
+    minHeight: '100vh',
+    backgroundColor: '#faf9f6',
+  },
+  content: {
     width: '100%',
-    maxWidth: '500px',
-    padding: '2.5rem',
-    backgroundColor: '#fff',
-    borderRadius: '12px',
-    boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+    maxWidth: '600px',
+  },
+  header: {
+    marginBottom: '3rem',
+    textAlign: 'center' as const,
   },
   title: {
-    fontSize: '1.75rem',
-    fontWeight: '700',
-    marginBottom: '2rem',
+    fontSize: '2rem',
+    fontWeight: 700,
+    color: '#1a1a1a',
+    letterSpacing: '-0.02em',
+    marginBottom: '0.75rem',
   },
-  sectionTitle: {
-    fontSize: '1.1rem',
-    fontWeight: '600',
-    marginTop: '1.5rem',
-    marginBottom: '1rem',
+  subtitle: {
+    fontSize: '1rem',
     color: '#52525b',
+    lineHeight: 1.5,
   },
-  form: {
+  progressContainer: {
+    marginBottom: '3rem',
+  },
+  progressCounter: {
+    fontSize: '0.875rem',
+    fontWeight: 700,
+    color: '#1a1a1a',
+    marginBottom: '0.75rem',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  progressTrack: {
+    height: '4px',
+    backgroundColor: '#e5e5e5',
+    borderRadius: '2px',
+    overflow: 'hidden',
+    marginBottom: '1rem',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#ea580c',
+    transition: 'width 0.3s ease',
+  },
+  progressLabels: {
+    display: 'flex',
+    justifyContent: 'space-between',
+  },
+  progressLabel: {
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    color: '#a1a1aa',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+  },
+  progressLabelActive: {
+    fontSize: '0.75rem',
+    fontWeight: 700,
+    color: '#1a1a1a',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+  },
+  stepContainer: {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '1.5rem',
+    marginBottom: '3rem',
   },
-  section: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '1rem',
+  stepTitle: {
+    fontSize: '1.5rem',
+    fontWeight: 700,
+    color: '#1a1a1a',
+    letterSpacing: '-0.02em',
   },
-  fieldRow: {
-    display: 'flex',
-    gap: '1rem',
-  },
-  field: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.5rem',
-    flex: 1,
-  },
-  label: {
-    fontSize: '0.875rem',
-    fontWeight: '600',
-  },
-  input: {
-    padding: '0.75rem',
-    borderRadius: '8px',
-    border: '1px solid #e5e5e5',
-    fontSize: '1rem',
-  },
-  button: {
-    padding: '0.875rem',
-    backgroundColor: '#16a34a', // Green functional accent for success actions
-    color: '#fff',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '1rem',
-    fontWeight: '600',
-    cursor: 'pointer',
-    marginTop: '1rem',
-  },
-  error: {
-    padding: '1rem',
-    backgroundColor: '#fef2f2',
-    color: '#dc2626',
-    borderRadius: '8px',
-    marginBottom: '1.5rem',
-    fontSize: '0.875rem',
-  },
-  success: {
-    padding: '1rem',
-    backgroundColor: '#f0fdf4',
-    color: '#16a34a',
-    borderRadius: '8px',
-    marginBottom: '1.5rem',
-    fontSize: '0.875rem',
-  },
-  loading: {
-    fontSize: '1.25rem',
-    fontWeight: '600',
+  stepSubtitle: {
+    fontSize: '0.9375rem',
     color: '#52525b',
-  }
+    marginTop: '-1rem',
+  },
+  formGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '1.5rem',
+  },
+  infoBox: {
+    backgroundColor: '#faf9f6',
+    border: '1px solid #e5e5e5',
+    borderRadius: '6px',
+    padding: '1.5rem',
+  },
+  errorAlert: {
+    padding: '0.875rem 1rem',
+    backgroundColor: '#fef2f2',
+    border: '1px solid #fecaca',
+    color: '#dc2626',
+    borderRadius: '6px',
+    marginBottom: '1.5rem',
+    fontSize: '0.875rem',
+    fontWeight: 500,
+  },
+  buttonContainer: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: '2rem',
+    borderTop: '1px solid #e5e5e5',
+  },
 };

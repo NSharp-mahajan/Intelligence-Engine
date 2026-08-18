@@ -2,19 +2,34 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { fetchApi } from '../../../lib/api';
+import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
+import { Badge } from '../../../components/ui/Badge';
+import { Button } from '../../../components/ui/Button';
 
 export default function PortalOverviewPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
+  const [skillsCount, setSkillsCount] = useState(0);
+  const [projectsCount, setProjectsCount] = useState(0);
+  const [recentProjects, setRecentProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const { profile } = await fetchApi('/profile');
-        setProfile(profile);
+        const [profileRes, skillsRes, projectsRes] = await Promise.all([
+          fetchApi('/profile').catch(() => ({ profile: null })),
+          fetchApi('/profile/skills').catch(() => ({ candidateSkills: [] })),
+          fetchApi('/profile/projects').catch(() => ({ projects: [] }))
+        ]);
+        
+        setProfile(profileRes?.profile || null);
+        setSkillsCount(skillsRes?.candidateSkills?.length || 0);
+        
+        const projects = projectsRes?.projects || [];
+        setProjectsCount(projects.length);
+        setRecentProjects(projects.slice(0, 3)); // Top 3 recent
       } catch (err) {
         console.error(err);
       } finally {
@@ -24,67 +39,154 @@ export default function PortalOverviewPage() {
     loadData();
   }, []);
 
-  if (loading) return null; // handled by layout spinner ideally, but keep clean
+  if (loading) return null;
 
   const isProfileComplete = profile && profile.fullName && profile.university && profile.targetRole;
+  const firstName = profile?.fullName ? profile.fullName.split(' ')[0] : 'Candidate';
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  };
 
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <h1 style={styles.title}>Overview</h1>
-        <p style={styles.subtitle}>Welcome back. Here is your current status.</p>
+        <h1 style={styles.title}>{getGreeting()}, {firstName}</h1>
+        <p style={styles.subtitle}>Your career intelligence overview.</p>
       </header>
 
-      <div style={styles.grid}>
-        {/* PROFILE STATUS */}
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>Profile Status</h2>
-          {isProfileComplete ? (
-            <div style={styles.statusBoxSuccess}>
-              <div style={styles.statusIcon}>✓</div>
-              <div>
-                <strong style={styles.statusText}>Profile Complete</strong>
-                <p style={styles.statusDesc}>Your foundational identity is set up.</p>
-              </div>
+      {/* KPI METRICS */}
+      <div style={styles.kpiGrid}>
+        <Card>
+          <CardBody style={styles.kpiCardBody}>
+            <span style={styles.kpiLabel}>PROFILE READINESS</span>
+            <div style={styles.kpiValueContainer}>
+              <span style={styles.kpiValue}>{isProfileComplete ? '100%' : '50%'}</span>
+              <Badge variant={isProfileComplete ? 'success' : 'warning'}>
+                {isProfileComplete ? 'Ready' : 'Incomplete'}
+              </Badge>
             </div>
-          ) : (
-            <div style={styles.statusBoxWarning}>
-              <div style={styles.statusIconWarning}>!</div>
-              <div>
-                <strong style={styles.statusTextWarning}>Profile Incomplete</strong>
-                <p style={styles.statusDescWarning}>Please complete your onboarding to receive accurate matches.</p>
-                <Link href="/onboarding" style={styles.actionLink}>Complete Profile &rarr;</Link>
-              </div>
+          </CardBody>
+        </Card>
+        
+        <Card>
+          <CardBody style={styles.kpiCardBody}>
+            <span style={styles.kpiLabel}>VERIFIED SKILLS</span>
+            <div style={styles.kpiValueContainer}>
+              <span style={styles.kpiValue}>{skillsCount}</span>
             </div>
-          )}
-        </section>
+          </CardBody>
+        </Card>
 
-        {/* PROJECTS */}
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>Projects & Evidence</h2>
-          <div style={styles.emptyState}>
-            <p style={styles.emptyText}>No projects added yet.</p>
-            <span style={styles.disabledLink}>Add Project (Coming Soon)</span>
-          </div>
-        </section>
+        <Card>
+          <CardBody style={styles.kpiCardBody}>
+            <span style={styles.kpiLabel}>PROJECT EVIDENCE</span>
+            <div style={styles.kpiValueContainer}>
+              <span style={styles.kpiValue}>{projectsCount}</span>
+            </div>
+          </CardBody>
+        </Card>
 
-        {/* SKILLS */}
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>Verified Skills</h2>
-          <div style={styles.emptyState}>
-            <p style={styles.emptyText}>No skills logged yet.</p>
-            <span style={styles.disabledLink}>Add Skills (Coming Soon)</span>
-          </div>
-        </section>
+        <Card>
+          <CardBody style={styles.kpiCardBody}>
+            <span style={styles.kpiLabel}>MATCHED OPPORTUNITIES</span>
+            <div style={styles.kpiValueContainer}>
+              <span style={styles.kpiValue}>0</span>
+            </div>
+          </CardBody>
+        </Card>
+      </div>
 
-        {/* OPPORTUNITIES */}
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>Matched Opportunities</h2>
-          <div style={styles.emptyState}>
-            <p style={styles.emptyText}>No opportunities yet.</p>
-            <span style={styles.disabledLink}>View Feed (Coming Soon)</span>
-          </div>
-        </section>
+      <div style={styles.mainGrid}>
+        {/* LEFT COLUMN */}
+        <div style={styles.leftCol}>
+          <Card style={{ marginBottom: '2rem' }}>
+            <CardHeader>
+              <h2 style={styles.sectionTitle}>Career Direction</h2>
+            </CardHeader>
+            <CardBody>
+              <div style={styles.infoRow}>
+                <span style={styles.infoLabel}>Target Role</span>
+                <span style={styles.infoValue}>{profile?.targetRole || 'Not specified'}</span>
+              </div>
+              <div style={styles.infoRow}>
+                <span style={styles.infoLabel}>Target Timeline</span>
+                <span style={styles.infoValue}>Graduation {profile?.graduationYear || 'Not specified'}</span>
+              </div>
+              <div style={styles.infoRow}>
+                <span style={styles.infoLabel}>Profile Completeness</span>
+                <span style={styles.infoValue}>{isProfileComplete ? 'All core fields provided' : 'Missing core fields'}</span>
+              </div>
+              {!isProfileComplete && (
+                <div style={{ marginTop: '1.5rem' }}>
+                  <Button variant="outline" onClick={() => router.push('/onboarding')}>Complete Profile</Button>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <h2 style={styles.sectionTitle}>Recent Evidence</h2>
+            </CardHeader>
+            <CardBody>
+              {recentProjects.length === 0 ? (
+                <div style={styles.emptyStateContainer}>
+                  <h3 style={styles.emptyStateTitle}>No project evidence yet.</h3>
+                  <p style={styles.emptyStateText}>
+                    Add your first project so Career Intelligence can begin evaluating your technical evidence.
+                  </p>
+                  <Button variant="outline" onClick={() => router.push('/evidence')}>Add Project</Button>
+                </div>
+              ) : (
+                <div style={styles.recentProjectsList}>
+                  {recentProjects.map(project => (
+                    <div key={project.id} style={styles.recentProjectItem}>
+                      <span style={styles.recentProjectName}>{project.name}</span>
+                      <div style={styles.recentProjectSkills}>
+                        {project.projectSkills?.slice(0, 3).map((ps: any) => (
+                          <Badge key={ps.skillId} variant="neutral">{ps.skill.name}</Badge>
+                        ))}
+                        {(project.projectSkills?.length || 0) > 3 && (
+                          <span style={styles.moreSkillsText}>+{(project.projectSkills.length - 3)}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+                    <Button variant="outline" onClick={() => router.push('/evidence')}>View All Evidence</Button>
+                  </div>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        </div>
+
+        {/* RIGHT COLUMN */}
+        <div style={styles.rightCol}>
+          <Card style={{ height: '100%' }}>
+            <CardHeader>
+              <h2 style={styles.sectionTitle}>Opportunity Matching</h2>
+            </CardHeader>
+            <CardBody style={styles.emptyStateContainer}>
+              <div style={styles.matchingPlaceholderIcon}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+              </div>
+              <h3 style={styles.emptyStateTitle}>No opportunities analyzed.</h3>
+              <p style={styles.emptyStateText}>
+                The matching engine requires both verified skills and project evidence to evaluate your fit against the current market.
+              </p>
+              <Button variant="primary" disabled>View Opportunities</Button>
+            </CardBody>
+          </Card>
+        </div>
       </div>
     </div>
   );
@@ -94,125 +196,144 @@ const styles = {
   container: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '2rem',
+    gap: '2.5rem',
   },
   header: {
-    marginBottom: '1rem',
+    marginBottom: '0.5rem',
   },
   title: {
-    fontSize: '2rem',
-    fontWeight: '700',
+    fontSize: '2.25rem',
+    fontWeight: 700,
     color: '#1a1a1a',
+    letterSpacing: '-0.03em',
     marginBottom: '0.5rem',
   },
   subtitle: {
-    fontSize: '1rem',
+    fontSize: '1.125rem',
     color: '#52525b',
   },
-  grid: {
+  kpiGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '1.25rem',
+  },
+  kpiCardBody: {
+    padding: '1.25rem 1.5rem',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.75rem',
+  },
+  kpiLabel: {
+    fontSize: '0.75rem',
+    fontWeight: 700,
+    color: '#a1a1aa',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+  },
+  kpiValueContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+  },
+  kpiValue: {
+    fontSize: '2rem',
+    fontWeight: 700,
+    color: '#1a1a1a',
+    lineHeight: 1,
+  },
+  mainGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-    gap: '1.5rem',
+    gap: '2rem',
   },
-  card: {
-    backgroundColor: '#ffffff',
-    border: '1px solid #e5e5e5',
-    borderRadius: '12px',
-    padding: '1.5rem',
+  leftCol: {
     display: 'flex',
     flexDirection: 'column' as const,
   },
-  cardTitle: {
+  rightCol: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
+  sectionTitle: {
     fontSize: '1.125rem',
-    fontWeight: '600',
-    marginBottom: '1.5rem',
+    fontWeight: 600,
     color: '#1a1a1a',
   },
-  statusBoxSuccess: {
+  infoRow: {
     display: 'flex',
-    alignItems: 'flex-start',
-    gap: '1rem',
-    padding: '1rem',
-    backgroundColor: '#f0fdf4',
-    borderRadius: '8px',
-    border: '1px solid #bbf7d0',
+    justifyContent: 'space-between',
+    paddingBottom: '1rem',
+    borderBottom: '1px solid #f4f4f5',
+    marginBottom: '1rem',
   },
-  statusIcon: {
-    backgroundColor: '#16a34a',
-    color: '#fff',
-    width: '24px',
-    height: '24px',
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 'bold',
+  infoLabel: {
     fontSize: '0.875rem',
+    fontWeight: 600,
+    color: '#52525b',
   },
-  statusText: {
-    color: '#166534',
-    display: 'block',
-    marginBottom: '0.25rem',
+  infoValue: {
+    fontSize: '0.9375rem',
+    fontWeight: 500,
+    color: '#1a1a1a',
   },
-  statusDesc: {
-    color: '#15803d',
-    fontSize: '0.875rem',
-  },
-  statusBoxWarning: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '1rem',
-    padding: '1rem',
-    backgroundColor: '#fff7ed',
-    borderRadius: '8px',
-    border: '1px solid #ffedd5',
-  },
-  statusIconWarning: {
-    backgroundColor: '#ea580c',
-    color: '#fff',
-    width: '24px',
-    height: '24px',
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 'bold',
-    fontSize: '0.875rem',
-  },
-  statusTextWarning: {
-    color: '#9a3412',
-    display: 'block',
-    marginBottom: '0.25rem',
-  },
-  statusDescWarning: {
-    color: '#c2410c',
-    fontSize: '0.875rem',
-    marginBottom: '0.75rem',
-  },
-  actionLink: {
-    color: '#ea580c',
-    fontWeight: '600',
-    fontSize: '0.875rem',
-    textDecoration: 'none',
-  },
-  emptyState: {
-    flex: 1,
+  emptyStateContainer: {
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '2rem 0',
     textAlign: 'center' as const,
+    padding: '4rem 2rem',
+    gap: '1rem',
+    height: '100%',
   },
-  emptyText: {
-    color: '#a1a1aa',
+  matchingPlaceholderIcon: {
+    width: '64px',
+    height: '64px',
+    borderRadius: '50%',
+    backgroundColor: '#fff7ed',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: '1rem',
-    fontSize: '0.875rem',
   },
-  disabledLink: {
-    color: '#d4d4d8',
-    fontWeight: '500',
-    fontSize: '0.875rem',
-    cursor: 'not-allowed',
+  emptyStateTitle: {
+    fontSize: '1.125rem',
+    fontWeight: 600,
+    color: '#1a1a1a',
+  },
+  emptyStateText: {
+    fontSize: '0.9375rem',
+    color: '#52525b',
+    lineHeight: 1.6,
+    maxWidth: '300px',
+    marginBottom: '1rem',
+  },
+  recentProjectsList: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '1rem',
+  },
+  recentProjectItem: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.5rem',
+    paddingBottom: '1rem',
+    borderBottom: '1px solid #f4f4f5',
+  },
+  recentProjectName: {
+    fontSize: '1rem',
+    fontWeight: 600,
+    color: '#1a1a1a',
+  },
+  recentProjectSkills: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    gap: '0.5rem',
+    alignItems: 'center',
+  },
+  moreSkillsText: {
+    fontSize: '0.75rem',
+    color: '#a1a1aa',
+    fontWeight: 500,
   }
 };

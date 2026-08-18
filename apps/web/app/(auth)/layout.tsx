@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { fetchApi } from '../../lib/api';
+import { Logo } from '../../components/ui/Logo';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -11,7 +12,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Exclude onboarding from standard portal shell, or give it a specialized minimal shell
   const isOnboarding = pathname === '/onboarding';
 
   useEffect(() => {
@@ -40,7 +40,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
-        <div style={styles.spinner}>Loading...</div>
+        <div style={styles.spinner}>Loading workspace...</div>
       </div>
     );
   }
@@ -51,8 +51,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     return (
       <div style={styles.onboardingLayout}>
         <header style={styles.onboardingHeader}>
-          <div style={styles.brand}>Career Intelligence</div>
-          <button onClick={handleLogout} style={styles.logoutBtnText}>Logout</button>
+          <Logo />
+          <button onClick={handleLogout} style={styles.logoutBtnText}>Sign Out</button>
         </header>
         <main style={styles.onboardingMain}>{children}</main>
       </div>
@@ -64,25 +64,37 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       {/* SIDEBAR */}
       <aside style={styles.sidebar}>
         <div style={styles.sidebarHeader}>
-          <div style={styles.brand}>Career Intelligence</div>
+          <Logo />
         </div>
         
         <nav style={styles.sidebarNav}>
+          <span style={styles.navSectionTitle}>WORKSPACE</span>
           <Link href="/portal" style={pathname === '/portal' ? styles.navItemActive : styles.navItem}>
             Overview
           </Link>
           <Link href="/profile" style={pathname === '/profile' ? styles.navItemActive : styles.navItem}>
             Profile
           </Link>
-          {/* Placeholders for future milestones */}
-          <div style={styles.navItemDisabled}>Skills & Projects</div>
+          
+          <span style={{ ...styles.navSectionTitle, marginTop: '2rem' }}>EVIDENCE</span>
+          <Link href="/evidence" style={pathname === '/evidence' ? styles.navItemActive : styles.navItem}>
+            Skills & Projects
+          </Link>
+          
+          <span style={{ ...styles.navSectionTitle, marginTop: '2rem' }}>DISCOVERY</span>
           <div style={styles.navItemDisabled}>Opportunities</div>
+          <div style={styles.navItemDisabled}>Matching</div>
         </nav>
 
         <div style={styles.sidebarFooter}>
           <div style={styles.userInfo}>
-            <div style={styles.userName}>{user.profile?.fullName || 'Candidate'}</div>
-            <div style={styles.userEmail}>{user.email}</div>
+            <div style={styles.userAvatar}>
+              {(user.profile?.fullName || user.email).charAt(0).toUpperCase()}
+            </div>
+            <div style={styles.userDetails}>
+              <div style={styles.userName}>{user.profile?.fullName || 'Candidate'}</div>
+              <div style={styles.userEmail}>{user.email}</div>
+            </div>
           </div>
           <button onClick={handleLogout} style={styles.logoutBtn}>Log out</button>
         </div>
@@ -107,9 +119,11 @@ const styles = {
     backgroundColor: '#faf9f6',
   },
   spinner: {
-    fontSize: '1.25rem',
-    fontWeight: '600',
-    color: '#52525b',
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    color: '#a1a1aa',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
   },
   onboardingLayout: {
     display: 'flex',
@@ -120,7 +134,8 @@ const styles = {
   onboardingHeader: {
     display: 'flex',
     justifyContent: 'space-between',
-    padding: '1.5rem 2rem',
+    alignItems: 'center',
+    padding: '1.25rem 2rem',
     backgroundColor: '#ffffff',
     borderBottom: '1px solid #e5e5e5',
   },
@@ -128,7 +143,7 @@ const styles = {
     background: 'none',
     border: 'none',
     color: '#52525b',
-    fontWeight: '600',
+    fontWeight: 600,
     cursor: 'pointer',
     fontSize: '0.875rem',
   },
@@ -150,43 +165,49 @@ const styles = {
     flexDirection: 'column' as const,
   },
   sidebarHeader: {
-    padding: '1.5rem 2rem',
+    padding: '1.5rem',
     borderBottom: '1px solid #e5e5e5',
   },
-  brand: {
-    fontSize: '1.25rem',
-    fontWeight: '700',
-    color: '#1a1a1a',
-    letterSpacing: '-0.02em',
-  },
   sidebarNav: {
-    padding: '1.5rem 1rem',
+    padding: '2rem 1.25rem',
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.5rem',
+    gap: '0.375rem',
     flex: 1,
   },
+  navSectionTitle: {
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    color: '#a1a1aa',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    marginBottom: '0.5rem',
+    paddingLeft: '0.75rem',
+  },
   navItem: {
-    padding: '0.75rem 1rem',
-    borderRadius: '8px',
+    padding: '0.625rem 0.875rem',
+    borderRadius: '6px',
     color: '#52525b',
-    fontWeight: '500',
+    fontWeight: 500,
+    fontSize: '0.9375rem',
     textDecoration: 'none',
-    transition: 'background-color 0.2s',
+    transition: 'all 0.2s ease',
   },
   navItemActive: {
-    padding: '0.75rem 1rem',
-    borderRadius: '8px',
-    color: '#16a34a', // Green primary
-    backgroundColor: '#f0fdf4',
-    fontWeight: '600',
+    padding: '0.625rem 0.875rem',
+    borderRadius: '6px',
+    color: '#ea580c', // Orange for active section
+    backgroundColor: '#fff7ed',
+    fontWeight: 600,
+    fontSize: '0.9375rem',
     textDecoration: 'none',
   },
   navItemDisabled: {
-    padding: '0.75rem 1rem',
-    borderRadius: '8px',
-    color: '#a1a1aa',
-    fontWeight: '500',
+    padding: '0.625rem 0.875rem',
+    borderRadius: '6px',
+    color: '#d4d4d8',
+    fontWeight: 500,
+    fontSize: '0.9375rem',
     cursor: 'not-allowed',
   },
   sidebarFooter: {
@@ -194,28 +215,54 @@ const styles = {
     borderTop: '1px solid #e5e5e5',
   },
   userInfo: {
-    marginBottom: '1rem',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    marginBottom: '1.25rem',
+  },
+  userAvatar: {
+    width: '36px',
+    height: '36px',
+    borderRadius: '8px',
+    backgroundColor: '#1a1a1a',
+    color: '#ffffff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 700,
+    fontSize: '1rem',
+  },
+  userDetails: {
+    flex: 1,
+    overflow: 'hidden',
   },
   userName: {
-    fontWeight: '600',
-    fontSize: '0.875rem',
+    fontWeight: 600,
+    fontSize: '0.9375rem',
     color: '#1a1a1a',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   userEmail: {
-    fontWeight: '400',
+    fontWeight: 400,
     fontSize: '0.75rem',
-    color: '#52525b',
+    color: '#a1a1aa',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   logoutBtn: {
     width: '100%',
-    padding: '0.5rem',
-    backgroundColor: 'transparent',
+    padding: '0.625rem',
+    backgroundColor: '#ffffff',
     border: '1px solid #e5e5e5',
     borderRadius: '6px',
     color: '#1a1a1a',
-    fontWeight: '600',
+    fontWeight: 600,
     fontSize: '0.875rem',
     cursor: 'pointer',
+    transition: 'background-color 0.2s ease',
   },
   portalMain: {
     flex: 1,
@@ -224,6 +271,6 @@ const styles = {
   contentContainer: {
     maxWidth: '1000px',
     margin: '0 auto',
-    padding: '3rem 2rem',
+    padding: '4rem 3rem',
   }
 };

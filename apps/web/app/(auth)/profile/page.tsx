@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchApi } from '../../../lib/api';
+import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
+import { Button } from '../../../components/ui/Button';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -31,62 +33,105 @@ export default function ProfilePage() {
     loadData();
   }, [router]);
 
-  const handleLogout = async () => {
-    await fetchApi('/auth/logout', { method: 'POST' });
-    router.push('/login');
-  };
-
-  if (loading) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.loading}>Loading profile...</div>
-      </div>
-    );
-  }
+  if (loading) return null;
 
   return (
     <div style={styles.container}>
-      <div style={styles.card}>
-        <div style={styles.header}>
-          <h1 style={styles.title}>Your Profile</h1>
-          <button onClick={handleLogout} style={styles.logoutButton}>Logout</button>
+      <header style={styles.header}>
+        <div>
+          <h1 style={styles.title}>Profile</h1>
+          <p style={styles.subtitle}>Manage your professional identity and evidence.</p>
         </div>
-        
-        <div style={styles.infoGroup}>
-          <div style={styles.label}>Full Name</div>
-          <div style={styles.value}>{profile.fullName}</div>
-        </div>
-
-        <div style={styles.infoGroup}>
-          <div style={styles.label}>Email Address</div>
-          <div style={styles.value}>{user?.email}</div>
-        </div>
-
-        <div style={styles.infoGroup}>
-          <div style={styles.label}>University</div>
-          <div style={styles.value}>{profile.university}</div>
-        </div>
-
-        <div style={styles.rowGroup}>
-          <div style={styles.infoGroup}>
-            <div style={styles.label}>Graduation Year</div>
-            <div style={styles.value}>{profile.graduationYear}</div>
-          </div>
-          <div style={styles.infoGroup}>
-            <div style={styles.label}>Target Role</div>
-            <div style={styles.value}>{profile.targetRole}</div>
-          </div>
-        </div>
-
-        <div style={styles.links}>
-          {profile.githubUrl && <a href={profile.githubUrl} target="_blank" rel="noreferrer" style={styles.link}>GitHub</a>}
-          {profile.linkedinUrl && <a href={profile.linkedinUrl} target="_blank" rel="noreferrer" style={styles.link}>LinkedIn</a>}
-          {profile.portfolioUrl && <a href={profile.portfolioUrl} target="_blank" rel="noreferrer" style={styles.link}>Portfolio</a>}
-        </div>
-
-        <button onClick={() => router.push('/onboarding')} style={styles.editButton}>
+        <Button variant="outline" onClick={() => router.push('/onboarding')}>
           Edit Profile
-        </button>
+        </Button>
+      </header>
+
+      <div style={styles.grid}>
+        <Card style={styles.card}>
+          <CardHeader>
+            <h2 style={styles.sectionTitle}>Identity</h2>
+          </CardHeader>
+          <CardBody>
+            <div style={styles.infoGrid}>
+              <div style={styles.infoGroup}>
+                <span style={styles.label}>Full Name</span>
+                <span style={styles.value}>{profile.fullName}</span>
+              </div>
+              <div style={styles.infoGroup}>
+                <span style={styles.label}>Email Address</span>
+                <span style={styles.value}>{user?.email}</span>
+              </div>
+              <div style={styles.infoGroup}>
+                <span style={styles.label}>Target Role</span>
+                <span style={styles.value}>{profile.targetRole}</span>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card style={styles.card}>
+          <CardHeader>
+            <h2 style={styles.sectionTitle}>Education</h2>
+          </CardHeader>
+          <CardBody>
+            <div style={styles.infoGrid}>
+              <div style={styles.infoGroup}>
+                <span style={styles.label}>University</span>
+                <span style={styles.value}>{profile.university}</span>
+              </div>
+              <div style={styles.infoGroup}>
+                <span style={styles.label}>Graduation Year</span>
+                <span style={styles.value}>{profile.graduationYear}</span>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card style={styles.card}>
+          <CardHeader>
+            <h2 style={styles.sectionTitle}>Professional Links</h2>
+          </CardHeader>
+          <CardBody>
+            <div style={styles.linkList}>
+              {profile.githubUrl ? (
+                <a href={profile.githubUrl} target="_blank" rel="noreferrer" style={styles.linkItem}>
+                  <span style={styles.linkLabel}>GitHub</span>
+                  <span style={styles.linkUrl}>{profile.githubUrl}</span>
+                </a>
+              ) : (
+                <div style={styles.linkItemEmpty}>
+                  <span style={styles.linkLabel}>GitHub</span>
+                  <span style={styles.linkEmptyText}>Not provided</span>
+                </div>
+              )}
+
+              {profile.linkedinUrl ? (
+                <a href={profile.linkedinUrl} target="_blank" rel="noreferrer" style={styles.linkItem}>
+                  <span style={styles.linkLabel}>LinkedIn</span>
+                  <span style={styles.linkUrl}>{profile.linkedinUrl}</span>
+                </a>
+              ) : (
+                <div style={styles.linkItemEmpty}>
+                  <span style={styles.linkLabel}>LinkedIn</span>
+                  <span style={styles.linkEmptyText}>Not provided</span>
+                </div>
+              )}
+
+              {profile.portfolioUrl ? (
+                <a href={profile.portfolioUrl} target="_blank" rel="noreferrer" style={styles.linkItem}>
+                  <span style={styles.linkLabel}>Portfolio</span>
+                  <span style={styles.linkUrl}>{profile.portfolioUrl}</span>
+                </a>
+              ) : (
+                <div style={styles.linkItemEmpty}>
+                  <span style={styles.linkLabel}>Portfolio</span>
+                  <span style={styles.linkEmptyText}>Not provided</span>
+                </div>
+              )}
+            </div>
+          </CardBody>
+        </Card>
       </div>
     </div>
   );
@@ -95,87 +140,103 @@ export default function ProfilePage() {
 const styles = {
   container: {
     display: 'flex',
-    minHeight: '100vh',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#faf9f6',
-    color: '#1a1a1a',
-    fontFamily: 'system-ui, sans-serif',
-    padding: '2rem',
-  },
-  card: {
-    width: '100%',
-    maxWidth: '500px',
-    padding: '2.5rem',
-    backgroundColor: '#fff',
-    borderRadius: '12px',
-    boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+    flexDirection: 'column' as const,
+    gap: '2.5rem',
+    maxWidth: '900px',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '2rem',
-    borderBottom: '1px solid #e5e5e5',
-    paddingBottom: '1rem',
+    alignItems: 'flex-start',
+    marginBottom: '1rem',
   },
   title: {
-    fontSize: '1.75rem',
-    fontWeight: '700',
-    margin: 0,
+    fontSize: '2.25rem',
+    fontWeight: 700,
+    color: '#1a1a1a',
+    letterSpacing: '-0.03em',
+    marginBottom: '0.5rem',
   },
-  logoutButton: {
-    backgroundColor: 'transparent',
-    border: '1px solid #e5e5e5',
-    padding: '0.5rem 1rem',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '0.875rem',
-    fontWeight: '600',
+  subtitle: {
+    fontSize: '1.125rem',
+    color: '#52525b',
+  },
+  grid: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '1.5rem',
+  },
+  card: {
+    width: '100%',
+  },
+  sectionTitle: {
+    fontSize: '1.125rem',
+    fontWeight: 600,
+    color: '#1a1a1a',
+  },
+  infoGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '2.5rem',
   },
   infoGroup: {
-    marginBottom: '1.5rem',
-    flex: 1,
-  },
-  rowGroup: {
     display: 'flex',
-    gap: '2rem',
+    flexDirection: 'column' as const,
+    gap: '0.375rem',
   },
   label: {
-    fontSize: '0.875rem',
-    fontWeight: '600',
-    color: '#52525b',
-    marginBottom: '0.25rem',
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    color: '#a1a1aa',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
   },
   value: {
-    fontSize: '1.125rem',
-    fontWeight: '500',
+    fontSize: '1.0625rem',
+    fontWeight: 500,
+    color: '#1a1a1a',
   },
-  links: {
+  linkList: {
     display: 'flex',
+    flexDirection: 'column' as const,
     gap: '1rem',
-    marginTop: '1rem',
-    marginBottom: '2rem',
   },
-  link: {
-    color: '#ea580c',
+  linkItem: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '1.25rem',
+    backgroundColor: '#faf9f6',
+    border: '1px solid #e5e5e5',
+    borderRadius: '6px',
     textDecoration: 'none',
-    fontWeight: '600',
+    transition: 'border-color 0.2s',
   },
-  editButton: {
-    width: '100%',
-    padding: '0.875rem',
-    backgroundColor: '#ea580c',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '1rem',
-    fontWeight: '600',
-    cursor: 'pointer',
+  linkItemEmpty: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '1.25rem',
+    backgroundColor: '#faf9f6',
+    border: '1px dashed #e5e5e5',
+    borderRadius: '6px',
   },
-  loading: {
-    fontSize: '1.25rem',
-    fontWeight: '600',
-    color: '#52525b',
+  linkLabel: {
+    width: '120px',
+    fontSize: '0.9375rem',
+    fontWeight: 600,
+    color: '#1a1a1a',
+  },
+  linkUrl: {
+    fontSize: '0.9375rem',
+    color: '#ea580c', // Orange interaction accent
+    flex: 1,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    fontWeight: 500,
+  },
+  linkEmptyText: {
+    fontSize: '0.9375rem',
+    color: '#a1a1aa',
+    fontStyle: 'italic',
   }
 };

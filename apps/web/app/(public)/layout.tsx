@@ -1,22 +1,26 @@
 'use client';
 
 import Link from 'next/link';
+import { Logo } from '../../components/ui/Logo';
+import { Button } from '../../components/ui/Button';
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
     <div style={styles.layout}>
       <header style={styles.header}>
         <div style={styles.navContainer}>
-          <Link href="/" style={styles.brand}>
-            Career Intelligence
-          </Link>
+          <Logo />
           <nav style={styles.nav}>
             <Link href="/#how-it-works" style={styles.navLink}>How It Works</Link>
             <Link href="/#why-us" style={styles.navLink}>Why Career Intelligence</Link>
             <Link href="/#matching" style={styles.navLink}>Matching</Link>
             <div style={styles.authButtons}>
-              <Link href="/login" style={styles.loginBtn}>Log In</Link>
-              <Link href="/register" style={styles.registerBtn}>Get Started</Link>
+              <Link href="/login" style={{ textDecoration: 'none' }}>
+                <Button variant="ghost">Log In</Button>
+              </Link>
+              <Link href="/register" style={{ textDecoration: 'none' }}>
+                <Button variant="primary">Get Started</Button>
+              </Link>
             </div>
           </nav>
         </div>
@@ -38,9 +42,11 @@ const styles = {
     display: 'flex',
     flexDirection: 'column' as const,
     minHeight: '100vh',
+    backgroundColor: '#faf9f6',
   },
   header: {
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backdropFilter: 'blur(8px)',
     borderBottom: '1px solid #e5e5e5',
     position: 'sticky' as const,
     top: 0,
@@ -54,41 +60,23 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  brand: {
-    fontSize: '1.25rem',
-    fontWeight: '700',
-    color: '#1a1a1a',
-    letterSpacing: '-0.02em',
-  },
   nav: {
     display: 'flex',
     alignItems: 'center',
-    gap: '2rem',
+    gap: '2.5rem',
   },
   navLink: {
     fontSize: '0.875rem',
-    fontWeight: '500',
+    fontWeight: 600,
     color: '#52525b',
+    textDecoration: 'none',
+    transition: 'color 0.2s',
   },
   authButtons: {
     display: 'flex',
     alignItems: 'center',
-    gap: '1rem',
+    gap: '0.75rem',
     marginLeft: '1rem',
-  },
-  loginBtn: {
-    fontSize: '0.875rem',
-    fontWeight: '600',
-    color: '#1a1a1a',
-  },
-  registerBtn: {
-    fontSize: '0.875rem',
-    fontWeight: '600',
-    backgroundColor: '#1a1a1a',
-    color: '#ffffff',
-    padding: '0.5rem 1rem',
-    borderRadius: '6px',
-    transition: 'background-color 0.2s',
   },
   main: {
     flex: 1,
@@ -98,7 +86,7 @@ const styles = {
   footer: {
     backgroundColor: '#ffffff',
     borderTop: '1px solid #e5e5e5',
-    padding: '2rem',
+    padding: '2.5rem',
     marginTop: 'auto',
   },
   footerContent: {
