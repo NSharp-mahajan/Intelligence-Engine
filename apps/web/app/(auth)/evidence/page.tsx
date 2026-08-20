@@ -41,13 +41,11 @@ export default function EvidencePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Modals state
   const [isAddSkillModalOpen, setAddSkillModalOpen] = useState(false);
   const [isProjectModalOpen, setProjectModalOpen] = useState(false);
   const [isDeleteProjectModalOpen, setDeleteProjectModalOpen] = useState(false);
   const [isAddProjectSkillModalOpen, setAddProjectSkillModalOpen] = useState(false);
 
-  // Active items for modals
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [projectToAddSkillTo, setProjectToAddSkillTo] = useState<Project | null>(null);
@@ -73,7 +71,6 @@ export default function EvidencePage() {
     }
   }
 
-  // --- Handlers ---
   const handleRemoveSkill = async (skillId: string) => {
     try {
       await fetchApi(`/profile/skills/${skillId}`, { method: 'DELETE' });
@@ -98,15 +95,19 @@ export default function EvidencePage() {
   };
 
   if (loading) {
-    return <div style={styles.loading}>Loading your evidence...</div>;
+    return (
+      <div style={styles.loading}>
+        <div className="animate-fade-in" style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Loading evidence...</div>
+      </div>
+    );
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
+    <div style={styles.container} className="animate-fade-in">
+      <header style={styles.header}>
         <h1 style={styles.title}>Skills & Projects</h1>
         <p style={styles.subtitle}>Build the evidence behind your career profile.</p>
-      </div>
+      </header>
 
       {error && <div style={styles.errorAlert}>{error}</div>}
 
@@ -120,7 +121,7 @@ export default function EvidencePage() {
           <CardBody>
             {candidateSkills.length === 0 ? (
               <div style={styles.emptyState}>
-                <p>No skills added yet.</p>
+                <p>No skills added yet. Add verified technical skills to activate matching.</p>
               </div>
             ) : (
               <div style={styles.skillsList}>
@@ -177,7 +178,7 @@ export default function EvidencePage() {
                         Edit
                       </button>
                       <button 
-                        style={{...styles.actionBtnText, color: '#dc2626'}}
+                        style={{...styles.actionBtnText, color: 'var(--error-text)'}}
                         onClick={() => { setProjectToDelete(project); setDeleteProjectModalOpen(true); }}
                       >
                         Delete
@@ -232,7 +233,6 @@ export default function EvidencePage() {
         )}
       </div>
 
-      {/* MODALS */}
       <AddSkillModal 
         isOpen={isAddSkillModalOpen} 
         onClose={() => setAddSkillModalOpen(false)} 
@@ -247,7 +247,7 @@ export default function EvidencePage() {
         onClose={() => setProjectModalOpen(false)} 
         project={editingProject}
         onSuccess={() => {
-          loadData(); // Refresh list to get fresh data
+          loadData();
           setProjectModalOpen(false);
         }}
       />
@@ -283,14 +283,11 @@ export default function EvidencePage() {
 }
 
 // --- Sub Components ---
-
 function AddSkillModal({ isOpen, onClose, onSuccess }: any) {
   const [skillName, setSkillName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // In a real app we'd fetch the global dictionary to power an autocomplete,
-  // but keeping it simple with a text input per requirements without overengineering
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!skillName.trim()) return;
@@ -334,12 +331,7 @@ function AddSkillModal({ isOpen, onClose, onSuccess }: any) {
 }
 
 function ProjectModal({ isOpen, onClose, project, onSuccess }: any) {
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    githubUrl: '',
-    liveUrl: '',
-  });
+  const [formData, setFormData] = useState({ name: '', description: '', githubUrl: '', liveUrl: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -360,24 +352,13 @@ function ProjectModal({ isOpen, onClose, project, onSuccess }: any) {
     e.preventDefault();
     setLoading(true);
     setError('');
-
-    const payload = {
-      ...formData,
-      githubUrl: formData.githubUrl || undefined,
-      liveUrl: formData.liveUrl || undefined,
-    };
+    const payload = { ...formData, githubUrl: formData.githubUrl || undefined, liveUrl: formData.liveUrl || undefined };
 
     try {
       if (project) {
-        await fetchApi(`/profile/projects/${project.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
+        await fetchApi(`/profile/projects/${project.id}`, { method: 'PUT', body: JSON.stringify(payload) });
       } else {
-        await fetchApi('/profile/projects', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+        await fetchApi('/profile/projects', { method: 'POST', body: JSON.stringify(payload) });
       }
       onSuccess();
     } catch (err: any) {
@@ -392,41 +373,15 @@ function ProjectModal({ isOpen, onClose, project, onSuccess }: any) {
       <form onSubmit={handleSubmit} style={styles.form}>
         {error && <div style={styles.errorAlert}>{error}</div>}
         
-        <Input 
-          label="Project Name" 
-          value={formData.name} 
-          onChange={(e) => setFormData({...formData, name: e.target.value})} 
-          placeholder="e.g. CyberCop"
-          required 
-        />
+        <Input label="Project Name" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="e.g. CyberCop" required />
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
-          <label style={{ fontSize: '0.875rem', fontWeight: 500, color: '#1a1a1a' }}>Description</label>
-          <textarea 
-            value={formData.description}
-            onChange={(e) => setFormData({...formData, description: e.target.value})}
-            style={styles.textarea}
-            placeholder="What did you build and why?"
-            required
-            rows={4}
-          />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '1rem' }}>
+          <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>Description</label>
+          <textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} style={styles.textarea} placeholder="What did you build and why?" required rows={4} />
         </div>
 
-        <Input 
-          label="GitHub URL (Optional)" 
-          type="url"
-          value={formData.githubUrl} 
-          onChange={(e) => setFormData({...formData, githubUrl: e.target.value})} 
-          placeholder="https://github.com/username/repo"
-        />
-
-        <Input 
-          label="Live Demo URL (Optional)" 
-          type="url"
-          value={formData.liveUrl} 
-          onChange={(e) => setFormData({...formData, liveUrl: e.target.value})} 
-          placeholder="https://myapp.com"
-        />
+        <Input label="GitHub URL (Optional)" type="url" value={formData.githubUrl} onChange={(e) => setFormData({...formData, githubUrl: e.target.value})} placeholder="https://github.com/username/repo" />
+        <Input label="Live Demo URL (Optional)" type="url" value={formData.liveUrl} onChange={(e) => setFormData({...formData, liveUrl: e.target.value})} placeholder="https://myapp.com" />
 
         <div style={styles.modalActions}>
           <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>Cancel</Button>
@@ -461,12 +416,12 @@ function DeleteProjectModal({ isOpen, onClose, project, onSuccess }: any) {
     <Modal isOpen={isOpen} onClose={onClose} title="Delete project?">
       <div style={styles.form}>
         {error && <div style={styles.errorAlert}>{error}</div>}
-        <p style={{ color: '#52525b', fontSize: '0.9375rem' }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem', lineHeight: 1.5 }}>
           This will permanently remove <strong>{project?.name}</strong> and its associated skills. This action cannot be undone.
         </p>
         <div style={styles.modalActions}>
           <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>Cancel</Button>
-          <Button type="button" variant="primary" onClick={handleDelete} disabled={loading} style={{ backgroundColor: '#dc2626', color: 'white', borderColor: '#dc2626' }}>
+          <Button type="button" variant="danger" onClick={handleDelete} disabled={loading}>
             {loading ? 'Deleting...' : 'Delete Project'}
           </Button>
         </div>
@@ -487,10 +442,7 @@ function AddProjectSkillModal({ isOpen, onClose, project, onSuccess }: any) {
     setError('');
     
     try {
-      const res = await fetchApi(`/profile/projects/${project.id}/skills`, {
-        method: 'POST',
-        body: JSON.stringify({ skillName }),
-      });
+      const res = await fetchApi(`/profile/projects/${project.id}/skills`, { method: 'POST', body: JSON.stringify({ skillName }) });
       onSuccess(res.projectSkill);
       setSkillName('');
     } catch (err: any) {
@@ -504,13 +456,7 @@ function AddProjectSkillModal({ isOpen, onClose, project, onSuccess }: any) {
     <Modal isOpen={isOpen} onClose={onClose} title={`Add Skill to ${project?.name}`}>
       <form onSubmit={handleSubmit} style={styles.form}>
         {error && <div style={styles.errorAlert}>{error}</div>}
-        <Input 
-          label="Skill Name" 
-          value={skillName} 
-          onChange={(e) => setSkillName(e.target.value)} 
-          placeholder="e.g. MongoDB, WebSockets"
-          required 
-        />
+        <Input label="Skill Name" value={skillName} onChange={(e) => setSkillName(e.target.value)} placeholder="e.g. MongoDB, WebSockets" required />
         <div style={styles.modalActions}>
           <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>Cancel</Button>
           <Button type="submit" variant="primary" disabled={loading}>
@@ -524,9 +470,10 @@ function AddProjectSkillModal({ isOpen, onClose, project, onSuccess }: any) {
 
 const styles: Record<string, React.CSSProperties> = {
   loading: {
-    padding: '3rem',
+    padding: '4rem',
     textAlign: 'center',
-    color: '#52525b',
+    display: 'flex',
+    justifyContent: 'center',
   },
   container: {
     display: 'flex',
@@ -540,24 +487,24 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '0.5rem',
   },
   title: {
-    fontSize: '2rem',
+    fontSize: '2.25rem',
     fontWeight: 700,
-    color: '#1a1a1a',
+    color: 'var(--text-primary)',
     margin: 0,
-    letterSpacing: '-0.02em',
+    letterSpacing: '-0.03em',
   },
   subtitle: {
-    fontSize: '1rem',
-    color: '#52525b',
+    fontSize: '1.125rem',
+    color: 'var(--text-secondary)',
     margin: 0,
   },
   errorAlert: {
-    backgroundColor: '#fef2f2',
-    color: '#dc2626',
+    backgroundColor: 'var(--error-bg)',
+    color: 'var(--error-text)',
     padding: '1rem',
-    borderRadius: '6px',
+    borderRadius: 'var(--radius-md)',
     fontSize: '0.875rem',
-    border: '1px solid #fee2e2',
+    border: '1px solid var(--error-border)',
   },
   section: {
     display: 'flex',
@@ -575,20 +522,20 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '0.25rem',
   },
   sectionTitle: {
-    fontSize: '1.25rem',
+    fontSize: '1.125rem',
     fontWeight: 600,
-    color: '#1a1a1a',
+    color: 'var(--text-primary)',
     margin: 0,
   },
   sectionSubtitle: {
-    fontSize: '0.875rem',
-    color: '#52525b',
+    fontSize: '0.9375rem',
+    color: 'var(--text-secondary)',
     margin: 0,
   },
   emptyState: {
-    padding: '2rem',
+    padding: '3rem 2rem',
     textAlign: 'center',
-    color: '#52525b',
+    color: 'var(--text-secondary)',
     fontSize: '0.9375rem',
   },
   skillsList: {
@@ -605,7 +552,7 @@ const styles: Record<string, React.CSSProperties> = {
   removeSkillBtn: {
     background: 'none',
     border: 'none',
-    color: '#a1a1aa',
+    color: 'var(--text-tertiary)',
     cursor: 'pointer',
     fontSize: '1.25rem',
     lineHeight: 1,
@@ -613,6 +560,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    transition: 'color var(--transition-fast)',
   },
   projectsGrid: {
     display: 'grid',
@@ -628,28 +576,29 @@ const styles: Record<string, React.CSSProperties> = {
   projectName: {
     fontSize: '1.125rem',
     fontWeight: 600,
-    color: '#1a1a1a',
+    color: 'var(--text-primary)',
     margin: 0,
   },
   projectActions: {
     display: 'flex',
-    gap: '0.75rem',
+    gap: '1rem',
   },
   actionBtnText: {
     background: 'none',
     border: 'none',
-    color: '#52525b',
+    color: 'var(--text-secondary)',
     fontSize: '0.8125rem',
     fontWeight: 500,
     cursor: 'pointer',
     padding: 0,
     textDecoration: 'underline',
+    transition: 'color var(--transition-fast)',
   },
   projectDesc: {
     fontSize: '0.9375rem',
-    color: '#52525b',
-    lineHeight: 1.5,
-    margin: '0 0 1rem 0',
+    color: 'var(--text-secondary)',
+    lineHeight: 1.6,
+    margin: '0 0 1.25rem 0',
   },
   projectLinks: {
     display: 'flex',
@@ -659,32 +608,33 @@ const styles: Record<string, React.CSSProperties> = {
   projectLink: {
     fontSize: '0.875rem',
     fontWeight: 500,
-    color: '#ea580c',
+    color: 'var(--accent-primary)',
     textDecoration: 'none',
   },
   projectSkillsSection: {
-    borderTop: '1px solid #e5e5e5',
+    borderTop: '1px solid var(--border-light)',
     paddingTop: '1rem',
   },
   projectSkillsHeader: {
     marginBottom: '0.75rem',
   },
   projectSkillsTitle: {
-    fontSize: '0.8125rem',
-    fontWeight: 600,
-    color: '#1a1a1a',
+    fontSize: '0.75rem',
+    fontWeight: 700,
+    color: 'var(--text-tertiary)',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
   addProjectSkillBtn: {
     background: 'none',
-    border: '1px dashed #e5e5e5',
+    border: '1px dashed var(--border-light)',
     borderRadius: '100px',
     padding: '0.25rem 0.75rem',
     fontSize: '0.75rem',
     fontWeight: 500,
-    color: '#52525b',
+    color: 'var(--text-secondary)',
     cursor: 'pointer',
+    transition: 'border-color var(--transition-fast), color var(--transition-fast)',
   },
   form: {
     display: 'flex',
@@ -700,13 +650,13 @@ const styles: Record<string, React.CSSProperties> = {
   textarea: {
     width: '100%',
     padding: '0.75rem 1rem',
-    borderRadius: '6px',
-    border: '1px solid #e5e5e5',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--border-light)',
     fontSize: '0.9375rem',
-    color: '#1a1a1a',
-    backgroundColor: '#ffffff',
+    color: 'var(--text-primary)',
+    backgroundColor: 'var(--bg-surface)',
     outline: 'none',
-    transition: 'border-color 0.2s',
+    transition: 'border-color var(--transition-fast), box-shadow var(--transition-fast)',
     resize: 'vertical',
     fontFamily: 'inherit',
   }

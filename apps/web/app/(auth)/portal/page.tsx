@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchApi } from '../../../lib/api';
 import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
@@ -39,7 +39,7 @@ export default function PortalOverviewPage() {
     loadData();
   }, []);
 
-  if (loading) return null;
+  if (loading) return null; // Can replace with a skeleton loader
 
   const isProfileComplete = profile && profile.fullName && profile.university && profile.targetRole;
   const firstName = profile?.fullName ? profile.fullName.split(' ')[0] : 'Candidate';
@@ -52,7 +52,7 @@ export default function PortalOverviewPage() {
   };
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} className="animate-fade-in">
       <header style={styles.header}>
         <h1 style={styles.title}>{getGreeting()}, {firstName}</h1>
         <p style={styles.subtitle}>Your career intelligence overview.</p>
@@ -60,8 +60,8 @@ export default function PortalOverviewPage() {
 
       {/* KPI METRICS */}
       <div style={styles.kpiGrid}>
-        <Card>
-          <CardBody style={styles.kpiCardBody}>
+        <Card style={styles.kpiCard}>
+          <div style={styles.kpiCardInner}>
             <span style={styles.kpiLabel}>PROFILE READINESS</span>
             <div style={styles.kpiValueContainer}>
               <span style={styles.kpiValue}>{isProfileComplete ? '100%' : '50%'}</span>
@@ -69,34 +69,34 @@ export default function PortalOverviewPage() {
                 {isProfileComplete ? 'Ready' : 'Incomplete'}
               </Badge>
             </div>
-          </CardBody>
+          </div>
         </Card>
         
-        <Card>
-          <CardBody style={styles.kpiCardBody}>
+        <Card style={styles.kpiCard}>
+          <div style={styles.kpiCardInner}>
             <span style={styles.kpiLabel}>VERIFIED SKILLS</span>
             <div style={styles.kpiValueContainer}>
               <span style={styles.kpiValue}>{skillsCount}</span>
             </div>
-          </CardBody>
+          </div>
         </Card>
 
-        <Card>
-          <CardBody style={styles.kpiCardBody}>
+        <Card style={styles.kpiCard}>
+          <div style={styles.kpiCardInner}>
             <span style={styles.kpiLabel}>PROJECT EVIDENCE</span>
             <div style={styles.kpiValueContainer}>
               <span style={styles.kpiValue}>{projectsCount}</span>
             </div>
-          </CardBody>
+          </div>
         </Card>
 
-        <Card>
-          <CardBody style={styles.kpiCardBody}>
+        <Card style={styles.kpiCard}>
+          <div style={styles.kpiCardInner}>
             <span style={styles.kpiLabel}>MATCHED OPPORTUNITIES</span>
             <div style={styles.kpiValueContainer}>
-              <span style={styles.kpiValue}>0</span>
+              <span style={{ ...styles.kpiValue as React.CSSProperties, color: 'var(--text-tertiary)' }}>0</span>
             </div>
-          </CardBody>
+          </div>
         </Card>
       </div>
 
@@ -117,8 +117,17 @@ export default function PortalOverviewPage() {
                 <span style={styles.infoValue}>Graduation {profile?.graduationYear || 'Not specified'}</span>
               </div>
               <div style={styles.infoRow}>
-                <span style={styles.infoLabel}>Profile Completeness</span>
-                <span style={styles.infoValue}>{isProfileComplete ? 'All core fields provided' : 'Missing core fields'}</span>
+                <span style={styles.infoLabel}>Profile Status</span>
+                <span style={styles.infoValue}>
+                  {isProfileComplete ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--success-text)' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"/></svg>
+                      All core fields provided
+                    </span>
+                  ) : (
+                    <span style={{ color: '#b45309' }}>Missing core fields</span>
+                  )}
+                </span>
               </div>
               {!isProfileComplete && (
                 <div style={{ marginTop: '1.5rem' }}>
@@ -130,14 +139,25 @@ export default function PortalOverviewPage() {
 
           <Card>
             <CardHeader>
-              <h2 style={styles.sectionTitle}>Recent Evidence</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={styles.sectionTitle}>Recent Evidence</h2>
+                {recentProjects.length > 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => router.push('/evidence')}>View all</Button>
+                )}
+              </div>
             </CardHeader>
             <CardBody>
               {recentProjects.length === 0 ? (
                 <div style={styles.emptyStateContainer}>
-                  <h3 style={styles.emptyStateTitle}>No project evidence yet.</h3>
+                  <div style={styles.emptyStateIcon}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <line x1="9" y1="3" x2="9" y2="21"></line>
+                    </svg>
+                  </div>
+                  <h3 style={styles.emptyStateTitle}>No project evidence yet</h3>
                   <p style={styles.emptyStateText}>
-                    Add your first project so Career Intelligence can begin evaluating your technical evidence.
+                    Add your first project so Career Intelligence can begin evaluating your technical capabilities.
                   </p>
                   <Button variant="outline" onClick={() => router.push('/evidence')}>Add Project</Button>
                 </div>
@@ -147,18 +167,15 @@ export default function PortalOverviewPage() {
                     <div key={project.id} style={styles.recentProjectItem}>
                       <span style={styles.recentProjectName}>{project.name}</span>
                       <div style={styles.recentProjectSkills}>
-                        {project.projectSkills?.slice(0, 3).map((ps: any) => (
+                        {project.projectSkills?.slice(0, 4).map((ps: any) => (
                           <Badge key={ps.skillId} variant="neutral">{ps.skill.name}</Badge>
                         ))}
-                        {(project.projectSkills?.length || 0) > 3 && (
-                          <span style={styles.moreSkillsText}>+{(project.projectSkills.length - 3)}</span>
+                        {(project.projectSkills?.length || 0) > 4 && (
+                          <span style={styles.moreSkillsText}>+{(project.projectSkills.length - 4)} more</span>
                         )}
                       </div>
                     </div>
                   ))}
-                  <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-                    <Button variant="outline" onClick={() => router.push('/evidence')}>View All Evidence</Button>
-                  </div>
                 </div>
               )}
             </CardBody>
@@ -171,17 +188,17 @@ export default function PortalOverviewPage() {
             <CardHeader>
               <h2 style={styles.sectionTitle}>Opportunity Matching</h2>
             </CardHeader>
-            <CardBody style={styles.emptyStateContainer}>
+            <CardBody style={styles.emptyStateContainerCentered}>
               <div style={styles.matchingPlaceholderIcon}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10"></circle>
                   <line x1="12" y1="16" x2="12" y2="12"></line>
                   <line x1="12" y1="8" x2="12.01" y2="8"></line>
                 </svg>
               </div>
-              <h3 style={styles.emptyStateTitle}>No opportunities analyzed.</h3>
+              <h3 style={styles.emptyStateTitle}>Matching Engine Paused</h3>
               <p style={styles.emptyStateText}>
-                The matching engine requires both verified skills and project evidence to evaluate your fit against the current market.
+                The intelligence engine requires both verified skills and project evidence to evaluate your fit against the current market. Add evidence to begin analysis.
               </p>
               <Button variant="primary" disabled>View Opportunities</Button>
             </CardBody>
@@ -192,42 +209,45 @@ export default function PortalOverviewPage() {
   );
 }
 
-const styles = {
+const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
-    flexDirection: 'column' as const,
+    flexDirection: 'column',
     gap: '2.5rem',
   },
   header: {
     marginBottom: '0.5rem',
   },
   title: {
-    fontSize: '2.25rem',
+    fontSize: '2.5rem',
     fontWeight: 700,
-    color: '#1a1a1a',
-    letterSpacing: '-0.03em',
+    color: 'var(--text-primary)',
+    letterSpacing: '-0.04em',
     marginBottom: '0.5rem',
   },
   subtitle: {
     fontSize: '1.125rem',
-    color: '#52525b',
+    color: 'var(--text-secondary)',
   },
   kpiGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
     gap: '1.25rem',
   },
-  kpiCardBody: {
-    padding: '1.25rem 1.5rem',
+  kpiCard: {
+    backgroundColor: 'var(--bg-surface)',
+  },
+  kpiCardInner: {
+    padding: '1.5rem',
     display: 'flex',
-    flexDirection: 'column' as const,
+    flexDirection: 'column',
     gap: '0.75rem',
   },
   kpiLabel: {
     fontSize: '0.75rem',
     fontWeight: 700,
-    color: '#a1a1aa',
-    textTransform: 'uppercase' as const,
+    color: 'var(--text-tertiary)',
+    textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
   kpiValueContainer: {
@@ -236,10 +256,11 @@ const styles = {
     gap: '1rem',
   },
   kpiValue: {
-    fontSize: '2rem',
+    fontSize: '2.5rem',
     fontWeight: 700,
-    color: '#1a1a1a',
+    color: 'var(--text-primary)',
     lineHeight: 1,
+    letterSpacing: '-0.02em',
   },
   mainGrid: {
     display: 'grid',
@@ -248,49 +269,68 @@ const styles = {
   },
   leftCol: {
     display: 'flex',
-    flexDirection: 'column' as const,
+    flexDirection: 'column',
   },
   rightCol: {
     display: 'flex',
-    flexDirection: 'column' as const,
+    flexDirection: 'column',
   },
   sectionTitle: {
     fontSize: '1.125rem',
     fontWeight: 600,
-    color: '#1a1a1a',
+    color: 'var(--text-primary)',
+    letterSpacing: '-0.01em',
   },
   infoRow: {
     display: 'flex',
     justifyContent: 'space-between',
     paddingBottom: '1rem',
-    borderBottom: '1px solid #f4f4f5',
+    borderBottom: '1px solid var(--border-light)',
     marginBottom: '1rem',
   },
   infoLabel: {
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    color: '#52525b',
+    fontSize: '0.9375rem',
+    fontWeight: 500,
+    color: 'var(--text-secondary)',
   },
   infoValue: {
     fontSize: '0.9375rem',
     fontWeight: 500,
-    color: '#1a1a1a',
+    color: 'var(--text-primary)',
   },
   emptyStateContainer: {
     display: 'flex',
-    flexDirection: 'column' as const,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    padding: '1rem 0',
+    gap: '0.5rem',
+  },
+  emptyStateContainerCentered: {
+    display: 'flex',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    textAlign: 'center' as const,
+    textAlign: 'center',
     padding: '4rem 2rem',
     gap: '1rem',
     height: '100%',
   },
+  emptyStateIcon: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '8px',
+    backgroundColor: 'var(--bg-surface-hover)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'var(--text-tertiary)',
+    marginBottom: '0.5rem',
+  },
   matchingPlaceholderIcon: {
     width: '64px',
     height: '64px',
-    borderRadius: '50%',
-    backgroundColor: '#fff7ed',
+    borderRadius: 'var(--radius-full)',
+    backgroundColor: 'var(--accent-light)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -299,41 +339,41 @@ const styles = {
   emptyStateTitle: {
     fontSize: '1.125rem',
     fontWeight: 600,
-    color: '#1a1a1a',
+    color: 'var(--text-primary)',
   },
   emptyStateText: {
     fontSize: '0.9375rem',
-    color: '#52525b',
+    color: 'var(--text-secondary)',
     lineHeight: 1.6,
-    maxWidth: '300px',
+    maxWidth: '350px',
     marginBottom: '1rem',
   },
   recentProjectsList: {
     display: 'flex',
-    flexDirection: 'column' as const,
+    flexDirection: 'column',
     gap: '1rem',
   },
   recentProjectItem: {
     display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.5rem',
+    flexDirection: 'column',
+    gap: '0.75rem',
     paddingBottom: '1rem',
-    borderBottom: '1px solid #f4f4f5',
+    borderBottom: '1px solid var(--border-light)',
   },
   recentProjectName: {
     fontSize: '1rem',
     fontWeight: 600,
-    color: '#1a1a1a',
+    color: 'var(--text-primary)',
   },
   recentProjectSkills: {
     display: 'flex',
-    flexWrap: 'wrap' as const,
+    flexWrap: 'wrap',
     gap: '0.5rem',
     alignItems: 'center',
   },
   moreSkillsText: {
     fontSize: '0.75rem',
-    color: '#a1a1aa',
+    color: 'var(--text-tertiary)',
     fontWeight: 500,
   }
 };

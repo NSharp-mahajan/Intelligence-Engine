@@ -36,7 +36,7 @@ export default function ProfilePage() {
   if (loading) return null;
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} className="animate-fade-in">
       <header style={styles.header}>
         <div>
           <h1 style={styles.title}>Profile</h1>
@@ -137,10 +137,10 @@ export default function ProfilePage() {
   );
 }
 
-const styles = {
+const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
-    flexDirection: 'column' as const,
+    flexDirection: 'column',
     gap: '2.5rem',
     maxWidth: '900px',
   },
@@ -153,17 +153,17 @@ const styles = {
   title: {
     fontSize: '2.25rem',
     fontWeight: 700,
-    color: '#1a1a1a',
+    color: 'var(--text-primary)',
     letterSpacing: '-0.03em',
     marginBottom: '0.5rem',
   },
   subtitle: {
     fontSize: '1.125rem',
-    color: '#52525b',
+    color: 'var(--text-secondary)',
   },
   grid: {
     display: 'flex',
-    flexDirection: 'column' as const,
+    flexDirection: 'column',
     gap: '1.5rem',
   },
   card: {
@@ -172,7 +172,7 @@ const styles = {
   sectionTitle: {
     fontSize: '1.125rem',
     fontWeight: 600,
-    color: '#1a1a1a',
+    color: 'var(--text-primary)',
   },
   infoGrid: {
     display: 'grid',
@@ -181,53 +181,53 @@ const styles = {
   },
   infoGroup: {
     display: 'flex',
-    flexDirection: 'column' as const,
+    flexDirection: 'column',
     gap: '0.375rem',
   },
   label: {
     fontSize: '0.75rem',
-    fontWeight: 600,
-    color: '#a1a1aa',
-    textTransform: 'uppercase' as const,
+    fontWeight: 700,
+    color: 'var(--text-tertiary)',
+    textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
   value: {
     fontSize: '1.0625rem',
     fontWeight: 500,
-    color: '#1a1a1a',
+    color: 'var(--text-primary)',
   },
   linkList: {
     display: 'flex',
-    flexDirection: 'column' as const,
+    flexDirection: 'column',
     gap: '1rem',
   },
   linkItem: {
     display: 'flex',
     alignItems: 'center',
     padding: '1.25rem',
-    backgroundColor: '#faf9f6',
-    border: '1px solid #e5e5e5',
-    borderRadius: '6px',
+    backgroundColor: 'var(--bg-primary)',
+    border: '1px solid var(--border-light)',
+    borderRadius: 'var(--radius-md)',
     textDecoration: 'none',
-    transition: 'border-color 0.2s',
+    transition: 'border-color var(--transition-fast)',
   },
   linkItemEmpty: {
     display: 'flex',
     alignItems: 'center',
     padding: '1.25rem',
-    backgroundColor: '#faf9f6',
-    border: '1px dashed #e5e5e5',
-    borderRadius: '6px',
+    backgroundColor: 'var(--bg-primary)',
+    border: '1px dashed var(--border-light)',
+    borderRadius: 'var(--radius-md)',
   },
   linkLabel: {
     width: '120px',
     fontSize: '0.9375rem',
     fontWeight: 600,
-    color: '#1a1a1a',
+    color: 'var(--text-primary)',
   },
   linkUrl: {
     fontSize: '0.9375rem',
-    color: '#ea580c', // Orange interaction accent
+    color: 'var(--accent-primary)',
     flex: 1,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -236,7 +236,7 @@ const styles = {
   },
   linkEmptyText: {
     fontSize: '0.9375rem',
-    color: '#a1a1aa',
+    color: 'var(--text-tertiary)',
     fontStyle: 'italic',
   }
 };

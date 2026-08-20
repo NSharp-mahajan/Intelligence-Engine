@@ -1,31 +1,64 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-type InputProps = React.InputHTMLAttributes<HTMLInputElement> & {
-  label: string;
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label?: string;
   error?: string;
-};
+}
 
 export function Input({ label, error, style, ...props }: InputProps) {
+  const [isFocused, setIsFocused] = useState(false);
+
+  const containerStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.375rem',
+    width: '100%',
+    marginBottom: '1rem',
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: '0.875rem',
+    fontWeight: 500,
+    color: error ? 'var(--error-text)' : 'var(--text-primary)',
+    display: 'flex',
+    justifyContent: 'space-between',
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '0.625rem 0.875rem',
+    borderRadius: 'var(--radius-md)',
+    border: `1px solid ${error ? 'var(--error-border)' : isFocused ? 'var(--border-focus)' : 'var(--border-light)'}`,
+    fontSize: '0.9375rem',
+    color: 'var(--text-primary)',
+    backgroundColor: 'var(--bg-surface)',
+    outline: 'none',
+    transition: 'border-color var(--transition-fast), box-shadow var(--transition-fast)',
+    boxShadow: isFocused ? `0 0 0 3px ${error ? 'var(--error-bg)' : 'var(--accent-light)'}` : 'var(--shadow-sm)',
+    ...style,
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', width: '100%' }}>
-      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#1a1a1a' }}>
-        {label}
-      </label>
+    <div style={containerStyle}>
+      {label && (
+        <label style={labelStyle}>
+          {label}
+          {props.required && <span style={{ color: 'var(--error-text)' }}>*</span>}
+        </label>
+      )}
       <input
-        style={{
-          padding: '0.75rem 1rem',
-          borderRadius: '6px',
-          border: error ? '1px solid #ef4444' : '1px solid #d4d4d8',
-          fontSize: '0.9375rem',
-          color: '#1a1a1a',
-          backgroundColor: '#ffffff',
-          outline: 'none',
-          transition: 'border-color 0.2s ease',
-          ...style,
+        style={inputStyle}
+        onFocus={(e) => {
+          setIsFocused(true);
+          props.onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setIsFocused(false);
+          props.onBlur?.(e);
         }}
         {...props}
       />
-      {error && <span style={{ fontSize: '0.75rem', color: '#ef4444' }}>{error}</span>}
+      {error && <span style={{ fontSize: '0.75rem', color: 'var(--error-text)', marginTop: '0.25rem' }}>{error}</span>}
     </div>
   );
 }
