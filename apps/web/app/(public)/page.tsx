@@ -1,6 +1,6 @@
 'use client';
 
-import { HeroInteractive } from '../../components/landing/HeroInteractive';
+import { EngineInAction } from '../../components/landing/EngineInAction';
 import { ProblemComparison } from '../../components/landing/ProblemComparison';
 import { ScrollDrivenEngine } from '../../components/landing/ScrollDrivenEngine';
 import { ExplainableMatchingInteractive } from '../../components/landing/ExplainableMatchingInteractive';
@@ -9,6 +9,7 @@ import { ProfileVsEvidence } from '../../components/landing/ProfileVsEvidence';
 import { LiveRequirementAnalysis } from '../../components/landing/LiveRequirementAnalysis';
 import { WhyCareerIntelligence } from '../../components/landing/WhyCareerIntelligence';
 import { ProductPreview } from '../../components/landing/ProductPreview';
+import { Footer } from '../../components/landing/Footer';
 import { Button } from '../../components/ui/Button';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -56,8 +57,10 @@ export default function LandingPage() {
             Stop searching.<br />
             <span style={{ color: 'var(--accent-primary)' }}>Start matching.</span>
           </h1>
-          <HeroInteractive />
         </section>
+
+        {/* ENGINE IN ACTION */}
+        <EngineInAction />
 
         {/* PROBLEM COMPARISON */}
         <ProblemComparison />
@@ -112,8 +115,9 @@ export default function LandingPage() {
             </Button>
           </div>
         </section>
-
       </main>
+
+      <Footer />
     </div>
   );
 }
@@ -153,7 +157,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '1.5rem',
   },
   heroSection: {
-    padding: '6rem 2rem 10rem 2rem',
+    padding: '6rem 2rem 2rem 2rem',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
