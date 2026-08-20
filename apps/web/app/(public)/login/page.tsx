@@ -3,10 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Logo } from '../../../components/ui/Logo';
-import { Input } from '../../../components/ui/Input';
-import { Button } from '../../../components/ui/Button';
 import { fetchApi } from '../../../lib/api';
+import { AuthVisualPanel } from '../../../components/landing/AuthVisualPanel';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,6 +12,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [focusedInput, setFocusedInput] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,77 +26,86 @@ export default function LoginPage() {
       });
       router.push('/portal');
     } catch (err: any) {
-      setError(err.message || 'Login failed');
+      setError(err.message || 'Incorrect credentials. Please try again.');
       setLoading(false);
     }
   };
 
   return (
     <div style={styles.container}>
-      {/* Left Panel: Visual/Branding */}
+      {/* LEFT PANEL */}
       <div style={styles.leftPanel} className="hide-on-mobile">
-        <div style={styles.brandingContent}>
-          <Logo monochrome />
-          <h1 style={styles.heroText}>Your next career move shouldn't be a guessing game.</h1>
-          <p style={styles.heroSubtext}>
-            Connect your verified technical evidence to the Career Intelligence engine to discover your exact market fit.
-          </p>
-          
-          {/* Subtle Engine Visualization */}
-          <div style={styles.engineVisual}>
-            <div style={styles.engineNode}>Skills</div>
-            <div style={styles.engineLine}></div>
-            <div style={styles.engineCore}>Engine</div>
-            <div style={styles.engineLine}></div>
-            <div style={styles.engineNode}>Match</div>
-          </div>
-        </div>
+        <AuthVisualPanel />
       </div>
 
-      {/* Right Panel: Auth Form */}
+      {/* RIGHT PANEL */}
       <div style={styles.rightPanel}>
-        <div style={styles.formWrapper}>
-          <div style={styles.mobileLogo} className="mobile-only">
-            <Logo />
+        <div style={styles.formContainer}>
+          <div style={styles.mobileHeader}>
+             <div style={styles.logoMark}>CI</div>
           </div>
+          
           <div style={styles.header}>
-            <h2 style={styles.title}>Welcome back</h2>
-            <p style={styles.subtitle}>Enter your credentials to access your portal.</p>
+            <h1 style={styles.title}>Welcome back</h1>
+            <p style={styles.subtitle}>Continue building your career intelligence profile.</p>
           </div>
 
           <form onSubmit={handleSubmit} style={styles.form}>
             {error && <div style={styles.errorAlert}>{error}</div>}
             
-            <Input
-              label="Email Address"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@example.com"
-              required
-              autoComplete="email"
-            />
-            
-            <Input
-              label="Password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-              autoComplete="current-password"
-            />
-            
-            <div style={{ marginTop: '0.5rem' }}>
-              <Button type="submit" fullWidth disabled={loading}>
-                {loading ? 'Signing in...' : 'Sign In'}
-              </Button>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Email address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onFocus={() => setFocusedInput('email')}
+                onBlur={() => setFocusedInput(null)}
+                style={{
+                  ...styles.input,
+                  ...(focusedInput === 'email' ? styles.inputFocused : {})
+                }}
+                required
+                autoComplete="email"
+              />
             </div>
+            
+            <div style={styles.inputGroup}>
+              <div style={styles.labelRow}>
+                <label style={styles.label}>Password</label>
+                <Link href="#" style={styles.forgotLink}>Forgot password?</Link>
+              </div>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onFocus={() => setFocusedInput('password')}
+                onBlur={() => setFocusedInput(null)}
+                style={{
+                  ...styles.input,
+                  ...(focusedInput === 'password' ? styles.inputFocused : {})
+                }}
+                required
+                autoComplete="current-password"
+              />
+            </div>
+            
+            <button 
+              type="submit" 
+              disabled={loading || !email || !password} 
+              style={{
+                ...styles.button,
+                ...(loading || !email || !password ? styles.buttonDisabled : {})
+              }}
+            >
+              {loading ? 'Signing in...' : 'Sign in'}
+            </button>
           </form>
 
-          <p style={styles.footerText}>
-            Don't have an account? <Link href="/register" style={styles.footerLink}>Create one now</Link>
-          </p>
+          <div style={styles.footer}>
+            <span style={styles.footerText}>Don't have an account? </span>
+            <Link href="/register" style={styles.footerLink}>Create account</Link>
+          </div>
         </div>
       </div>
     </div>
@@ -109,86 +117,47 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     minHeight: '100vh',
     width: '100%',
+    backgroundColor: '#ffffff',
   },
   leftPanel: {
-    flex: 1,
-    backgroundColor: 'var(--bg-dark)',
-    color: 'var(--text-inverse)',
+    flex: '0 0 42%',
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'center',
-    padding: '4rem',
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  brandingContent: {
-    maxWidth: '500px',
-    zIndex: 1,
-  },
-  heroText: {
-    fontSize: '2.5rem',
-    fontWeight: 700,
-    lineHeight: 1.1,
-    letterSpacing: '-0.03em',
-    marginTop: '3rem',
-    marginBottom: '1.5rem',
-    color: 'var(--text-inverse)',
-  },
-  heroSubtext: {
-    fontSize: '1.125rem',
-    color: '#a1a1aa',
-    lineHeight: 1.6,
-  },
-  engineVisual: {
-    display: 'flex',
-    alignItems: 'center',
-    marginTop: '4rem',
-    gap: '1rem',
-    opacity: 0.8,
-  },
-  engineNode: {
-    padding: '0.5rem 1rem',
-    border: '1px solid #3f3f46',
-    borderRadius: 'var(--radius-full)',
-    fontSize: '0.875rem',
-    fontWeight: 500,
-  },
-  engineLine: {
-    height: '1px',
-    flex: 1,
-    backgroundColor: '#3f3f46',
-    position: 'relative',
-  },
-  engineCore: {
-    padding: '0.5rem 1rem',
-    backgroundColor: 'var(--accent-primary)',
-    color: 'white',
-    borderRadius: 'var(--radius-full)',
-    fontSize: '0.875rem',
-    fontWeight: 600,
   },
   rightPanel: {
-    flex: 1,
-    backgroundColor: 'var(--bg-primary)',
+    flex: '1',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     padding: '2rem',
   },
-  formWrapper: {
+  formContainer: {
     width: '100%',
-    maxWidth: '400px',
+    maxWidth: '420px',
+    animation: 'fadeIn 0.5s ease-out',
   },
-  mobileLogo: {
-    marginBottom: '2rem',
-    display: 'none', // handled by css
+  mobileHeader: {
+    marginBottom: '3rem',
+    display: 'none', // Handled by media queries ideally, but we'll show it only if left panel is hidden
+  },
+  logoMark: {
+    width: '32px',
+    height: '32px',
+    backgroundColor: 'var(--text-primary)',
+    color: 'var(--text-inverse)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 900,
+    fontSize: '0.875rem',
+    borderRadius: '4px',
   },
   header: {
-    marginBottom: '2rem',
+    marginBottom: '2.5rem',
   },
   title: {
     fontSize: '1.75rem',
-    fontWeight: 600,
+    fontWeight: 800,
     color: 'var(--text-primary)',
     letterSpacing: '-0.02em',
     marginBottom: '0.5rem',
@@ -196,29 +165,91 @@ const styles: Record<string, React.CSSProperties> = {
   subtitle: {
     fontSize: '0.9375rem',
     color: 'var(--text-secondary)',
+    lineHeight: 1.5,
   },
   form: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '1rem',
+    gap: '1.25rem',
   },
   errorAlert: {
     backgroundColor: 'var(--error-bg)',
     color: 'var(--error-text)',
-    padding: '0.75rem 1rem',
-    borderRadius: 'var(--radius-md)',
+    padding: '0.875rem 1rem',
+    borderRadius: '8px',
     fontSize: '0.875rem',
     border: '1px solid var(--error-border)',
+    fontWeight: 500,
+    animation: 'slideUpFade 0.3s ease-out',
+  },
+  inputGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+  },
+  labelRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  label: {
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    color: 'var(--text-primary)',
+  },
+  forgotLink: {
+    fontSize: '0.8125rem',
+    color: 'var(--text-secondary)',
+    textDecoration: 'none',
+    fontWeight: 500,
+  },
+  input: {
+    width: '100%',
+    padding: '0.75rem 1rem',
+    borderRadius: '10px',
+    border: '1px solid var(--border-light)',
+    fontSize: '1rem',
+    color: 'var(--text-primary)',
+    backgroundColor: '#ffffff',
+    outline: 'none',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+  },
+  inputFocused: {
+    borderColor: 'var(--success-text)',
+    boxShadow: '0 0 0 3px rgba(21, 128, 61, 0.1)',
+  },
+  button: {
+    width: '100%',
+    padding: '0.875rem',
+    backgroundColor: 'var(--success-text)', // Deep green
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '10px',
+    fontSize: '1rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    marginTop: '0.5rem',
+    boxShadow: '0 4px 6px -1px rgba(21, 128, 61, 0.2)',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+    boxShadow: 'none',
+  },
+  footer: {
+    marginTop: '2.5rem',
+    textAlign: 'left',
   },
   footerText: {
-    marginTop: '2rem',
-    textAlign: 'center',
     fontSize: '0.9375rem',
     color: 'var(--text-secondary)',
   },
   footerLink: {
-    color: 'var(--accent-primary)',
-    fontWeight: 500,
+    fontSize: '0.9375rem',
+    color: 'var(--text-primary)',
+    fontWeight: 700,
     textDecoration: 'none',
   }
 };
