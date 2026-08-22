@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { fetchApi } from '../../../lib/api';
-import { AuthVisualPanel } from '../../../components/landing/AuthVisualPanel';
+import { GlassAuthLayout } from '../../../components/auth/GlassAuthLayout';
+import { SocialButtons } from '../../../components/auth/SocialButtons';
+import { PasswordInput } from '../../../components/auth/PasswordInput';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,138 +34,82 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={styles.container}>
-      {/* LEFT PANEL */}
-      <div style={styles.leftPanel} className="hide-on-mobile">
-        <AuthVisualPanel />
+    <GlassAuthLayout>
+      <div style={styles.header}>
+        <h2 style={styles.title}>Welcome back</h2>
+        <p style={styles.subtitle}>Continue building your evidence and finding opportunities where you fit.</p>
       </div>
 
-      {/* RIGHT PANEL */}
-      <div style={styles.rightPanel}>
-        <div style={styles.formContainer}>
-          <div style={styles.mobileHeader}>
-             <div style={styles.logoMark}>CI</div>
-          </div>
-          
-          <div style={styles.header}>
-            <h1 style={styles.title}>Welcome back</h1>
-            <p style={styles.subtitle}>Continue building your career intelligence profile.</p>
-          </div>
-
-          <form onSubmit={handleSubmit} style={styles.form}>
-            {error && <div style={styles.errorAlert}>{error}</div>}
-            
-            <div style={styles.inputGroup}>
-              <label style={styles.label}>Email address</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onFocus={() => setFocusedInput('email')}
-                onBlur={() => setFocusedInput(null)}
-                style={{
-                  ...styles.input,
-                  ...(focusedInput === 'email' ? styles.inputFocused : {})
-                }}
-                required
-                autoComplete="email"
-              />
-            </div>
-            
-            <div style={styles.inputGroup}>
-              <div style={styles.labelRow}>
-                <label style={styles.label}>Password</label>
-                <Link href="#" style={styles.forgotLink}>Forgot password?</Link>
-              </div>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onFocus={() => setFocusedInput('password')}
-                onBlur={() => setFocusedInput(null)}
-                style={{
-                  ...styles.input,
-                  ...(focusedInput === 'password' ? styles.inputFocused : {})
-                }}
-                required
-                autoComplete="current-password"
-              />
-            </div>
-            
-            <button 
-              type="submit" 
-              disabled={loading || !email || !password} 
-              style={{
-                ...styles.button,
-                ...(loading || !email || !password ? styles.buttonDisabled : {})
-              }}
-            >
-              {loading ? 'Signing in...' : 'Sign in'}
-            </button>
-          </form>
-
-          <div style={styles.footer}>
-            <span style={styles.footerText}>Don't have an account? </span>
-            <Link href="/register" style={styles.footerLink}>Create account</Link>
-          </div>
+      <form onSubmit={handleSubmit} style={styles.form}>
+        {error && <div style={styles.errorAlert}>{error}</div>}
+        
+        <div style={styles.inputGroup}>
+          <label style={styles.label}>Email Address</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onFocus={() => setFocusedInput('email')}
+            onBlur={() => setFocusedInput(null)}
+            placeholder="name@example.com"
+            style={{
+              ...styles.input,
+              ...(focusedInput === 'email' ? styles.inputFocused : {})
+            }}
+            required
+            autoComplete="email"
+          />
         </div>
+        
+        <div style={styles.inputGroup}>
+          <div style={styles.labelRow}>
+            <label style={styles.label}>Password</label>
+            <Link href="#" style={styles.forgotLink}>Forgot password?</Link>
+          </div>
+          <PasswordInput
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onFocus={() => setFocusedInput('password')}
+            onBlur={() => setFocusedInput(null)}
+            isFocused={focusedInput === 'password'}
+          />
+        </div>
+        
+        <button 
+          type="submit" 
+          disabled={loading || !email || !password} 
+          style={{
+            ...styles.button,
+            ...(loading || !email || !password ? styles.buttonDisabled : {})
+          }}
+        >
+          {loading ? 'Signing in...' : 'Sign in'}
+        </button>
+      </form>
+
+      <SocialButtons />
+
+      <div style={styles.footer}>
+        <span style={styles.footerText}>Don't have an account? </span>
+        <Link href="/register" style={styles.footerLink}>Create one</Link>
       </div>
-    </div>
+    </GlassAuthLayout>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    minHeight: '100vh',
-    width: '100%',
-    backgroundColor: '#ffffff',
-  },
-  leftPanel: {
-    flex: '0 0 42%',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  rightPanel: {
-    flex: '1',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '2rem',
-  },
-  formContainer: {
-    width: '100%',
-    maxWidth: '420px',
-    animation: 'fadeIn 0.5s ease-out',
-  },
-  mobileHeader: {
-    marginBottom: '3rem',
-    display: 'none', // Handled by media queries ideally, but we'll show it only if left panel is hidden
-  },
-  logoMark: {
-    width: '32px',
-    height: '32px',
-    backgroundColor: 'var(--text-primary)',
-    color: 'var(--text-inverse)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 900,
-    fontSize: '0.875rem',
-    borderRadius: '4px',
-  },
   header: {
-    marginBottom: '2.5rem',
+    marginBottom: '2rem',
   },
   title: {
-    fontSize: '1.75rem',
+    fontSize: '2rem', // 32px
     fontWeight: 800,
     color: 'var(--text-primary)',
     letterSpacing: '-0.02em',
     marginBottom: '0.5rem',
   },
   subtitle: {
-    fontSize: '0.9375rem',
+    fontSize: '0.9375rem', // 15px
     color: 'var(--text-secondary)',
     lineHeight: 1.5,
   },
@@ -175,7 +121,7 @@ const styles: Record<string, React.CSSProperties> = {
   errorAlert: {
     backgroundColor: 'var(--error-bg)',
     color: 'var(--error-text)',
-    padding: '0.875rem 1rem',
+    padding: '0.75rem 1rem',
     borderRadius: '8px',
     fontSize: '0.875rem',
     border: '1px solid var(--error-border)',
@@ -185,7 +131,7 @@ const styles: Record<string, React.CSSProperties> = {
   inputGroup: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.5rem',
+    gap: '0.375rem',
   },
   labelRow: {
     display: 'flex',
@@ -193,7 +139,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
   },
   label: {
-    fontSize: '0.875rem',
+    fontSize: '0.8125rem', // 13px
     fontWeight: 600,
     color: 'var(--text-primary)',
   },
@@ -205,33 +151,34 @@ const styles: Record<string, React.CSSProperties> = {
   },
   input: {
     width: '100%',
-    padding: '0.75rem 1rem',
-    borderRadius: '10px',
+    padding: '0.75rem 1rem', // ~52px total height approx depending on box-sizing
+    borderRadius: '12px',
     border: '1px solid var(--border-light)',
-    fontSize: '1rem',
+    fontSize: '0.9375rem', // 15px
     color: 'var(--text-primary)',
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
     outline: 'none',
     transition: 'all 0.2s ease',
     boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
   },
   inputFocused: {
-    borderColor: 'var(--success-text)',
-    boxShadow: '0 0 0 3px rgba(21, 128, 61, 0.1)',
+    border: '1px solid var(--accent-primary)',
+    boxShadow: '0 0 0 3px rgba(234, 88, 12, 0.15)',
+    backgroundColor: '#ffffff',
   },
   button: {
     width: '100%',
-    padding: '0.875rem',
-    backgroundColor: 'var(--success-text)', // Deep green
+    padding: '0.875rem', 
+    backgroundColor: 'var(--accent-primary)', // Orange primary CTA
     color: '#ffffff',
     border: 'none',
-    borderRadius: '10px',
-    fontSize: '1rem',
+    borderRadius: '12px',
+    fontSize: '0.875rem', // 14px
     fontWeight: 600,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     marginTop: '0.5rem',
-    boxShadow: '0 4px 6px -1px rgba(21, 128, 61, 0.2)',
+    boxShadow: '0 4px 12px rgba(234, 88, 12, 0.2)',
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -239,15 +186,15 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: 'none',
   },
   footer: {
-    marginTop: '2.5rem',
-    textAlign: 'left',
+    marginTop: '2rem',
+    textAlign: 'center',
   },
   footerText: {
-    fontSize: '0.9375rem',
+    fontSize: '0.875rem',
     color: 'var(--text-secondary)',
   },
   footerLink: {
-    fontSize: '0.9375rem',
+    fontSize: '0.875rem',
     color: 'var(--text-primary)',
     fontWeight: 700,
     textDecoration: 'none',

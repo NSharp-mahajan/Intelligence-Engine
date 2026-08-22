@@ -195,3 +195,9 @@ p {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+@keyframes fadeInSlow { from { opacity: 0; } to { opacity: 1; } }
+@keyframes trace-travel-vertical { from { top: -100%; } to { top: 100%; } }
+@keyframes float { 0% { transform: translateY(0px); } 100% { transform: translateY(-5px); } }
+
+@keyframes slowPan { from { transform: scale(1) translate(0, 0); } to { transform: scale(1.05) translate(-1%, -1%); } }
