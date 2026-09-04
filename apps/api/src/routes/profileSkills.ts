@@ -107,7 +107,7 @@ router.delete('/:skillId', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const { skillId } = req.params;
+    const skillId = req.params.skillId as string;
 
     // Check if it exists
     const existing = await prisma.candidateSkill.findUnique({

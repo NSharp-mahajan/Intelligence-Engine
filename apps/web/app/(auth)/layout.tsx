@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { useClerk } from '@clerk/nextjs';
 import { fetchApi } from '../../lib/api';
 import { Logo } from '../../components/ui/Logo';
 
@@ -14,9 +15,18 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const isOnboarding = pathname === '/onboarding';
+  const isSyncProfile = pathname === '/sync-profile';
 
   useEffect(() => {
     async function checkAuth() {
+      // Profile sync must run before the profile-gated layout checks /auth/me.
+      // Otherwise a newly signed-in user is redirected back to /login before
+      // the sync request has a chance to create the API-side profile.
+      if (isSyncProfile) {
+        setLoading(false);
+        return;
+      }
+
       try {
         const userData = await fetchApi('/auth/me');
         setUser(userData);
@@ -27,7 +37,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       }
     }
     checkAuth();
-  }, [router, pathname]);
+  }, [router, pathname, isSyncProfile]);
+
+  const { signOut } = useClerk();
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -36,7 +48,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
   const handleLogout = async () => {
     try {
-      await fetchApi('/auth/logout', { method: 'POST' });
+      await signOut();
       router.push('/login');
     } catch (err) {
       console.error(err);
@@ -50,6 +62,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </div>
     );
   }
+
+  if (isSyncProfile) return <>{children}</>;
 
   if (!user) return null;
 

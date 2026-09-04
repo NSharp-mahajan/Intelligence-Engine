@@ -87,7 +87,7 @@ router.get('/:projectId', async (req: AuthRequest, res: Response) => {
     }
 
     const project = await prisma.project.findUnique({
-      where: { id: req.params.projectId },
+      where: { id: ((req.params.projectId as string) as string) },
       include: {
         projectSkills: {
           include: { skill: true }
@@ -116,7 +116,7 @@ router.put('/:projectId', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    const project = await prisma.project.findUnique({ where: { id: ((req.params.projectId as string) as string) } });
     if (!project || project.profileId !== profile.id) {
       res.status(404).json({ error: { code: 'PROJECT_NOT_FOUND', message: 'Project not found or unauthorized.' } });
       return;
@@ -161,7 +161,7 @@ router.delete('/:projectId', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    const project = await prisma.project.findUnique({ where: { id: ((req.params.projectId as string) as string) } });
     if (!project || project.profileId !== profile.id) {
       res.status(404).json({ error: { code: 'PROJECT_NOT_FOUND', message: 'Project not found or unauthorized.' } });
       return;
@@ -192,7 +192,7 @@ router.post('/:projectId/skills', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    const project = await prisma.project.findUnique({ where: { id: ((req.params.projectId as string) as string) } });
     if (!project || project.profileId !== profile.id) {
       res.status(404).json({ error: { code: 'PROJECT_NOT_FOUND', message: 'Project not found or unauthorized.' } });
       return;
@@ -261,13 +261,13 @@ router.delete('/:projectId/skills/:skillId', async (req: AuthRequest, res: Respo
       return;
     }
 
-    const project = await prisma.project.findUnique({ where: { id: req.params.projectId } });
+    const project = await prisma.project.findUnique({ where: { id: ((req.params.projectId as string) as string) } });
     if (!project || project.profileId !== profile.id) {
       res.status(404).json({ error: { code: 'PROJECT_NOT_FOUND', message: 'Project not found or unauthorized.' } });
       return;
     }
 
-    const { skillId } = req.params;
+    const skillId = req.params.skillId as string;
 
     // Check if it exists
     const existing = await prisma.projectSkill.findUnique({

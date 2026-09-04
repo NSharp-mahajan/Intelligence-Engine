@@ -3,6 +3,7 @@ import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import { clerkMiddleware } from '@clerk/express';
 import authRoutes from './routes/auth';
 import profileRoutes from './routes/profile';
 
@@ -17,6 +18,10 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(cookieParser());
+// Register Clerk before any route calls getAuth() or requireAuth().
+// This makes token verification and request auth state available consistently,
+// including the first request to the session/profile sync endpoint.
+app.use(clerkMiddleware());
 
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'Backend is alive' });

@@ -17,10 +17,14 @@ export const metadata: Metadata = {
   description: "Stop searching. Start matching. Build your career on verified evidence.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+import { ClerkProvider } from '@clerk/nextjs';
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body>{children}</body>
-    </html>
+    <ClerkProvider>
+      <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+        <body>{children}</body>
+      </html>
+    </ClerkProvider>
   );
 }

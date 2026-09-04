@@ -1,34 +1,52 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { fetchApi } from '../../../lib/api';
+import { useSignIn, useAuth } from '@clerk/nextjs';
 import { GlassAuthLayout } from '../../../components/auth/GlassAuthLayout';
 import { SocialButtons } from '../../../components/auth/SocialButtons';
 import { PasswordInput } from '../../../components/auth/PasswordInput';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { isLoaded, signIn, setActive } = useSignIn();
+  const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (authLoaded && isSignedIn) {
+      router.replace('/sync-profile');
+    }
+  }, [authLoaded, isSignedIn, router]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLoaded) return;
     setError('');
     setLoading(true);
 
     try {
-      await fetchApi('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
+      const result = await signIn.create({
+        identifier: email,
+        password,
       });
-      router.push('/portal');
+
+      if (result.status === 'complete') {
+        await setActive({ session: result.createdSessionId });
+        router.replace('/sync-profile');
+      } else {
+        console.warn('SignIn incomplete:', result);
+        setError('Sign in requires additional steps.');
+        setLoading(false);
+      }
     } catch (err: any) {
-      setError(err.message || 'Incorrect credentials. Please try again.');
+      console.error(err);
+      setError(err.errors?.[0]?.longMessage || err.errors?.[0]?.message || 'Incorrect credentials. Please try again.');
       setLoading(false);
     }
   };

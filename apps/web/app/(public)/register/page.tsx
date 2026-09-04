@@ -1,15 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { fetchApi } from '../../../lib/api';
+import { useSignUp, useAuth } from '@clerk/nextjs';
 import { GlassAuthLayout } from '../../../components/auth/GlassAuthLayout';
 import { SocialButtons } from '../../../components/auth/SocialButtons';
 import { PasswordInput } from '../../../components/auth/PasswordInput';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { isLoaded, signUp, setActive } = useSignUp();
+  const { isSignedIn, isLoaded: authLoaded } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,28 +19,93 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
 
+  const [pendingVerification, setPendingVerification] = useState(false);
+  const [code, setCode] = useState('');
+
+  useEffect(() => {
+    if (authLoaded && isSignedIn) {
+      router.replace('/sync-profile');
+    }
+  }, [authLoaded, isSignedIn, router]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLoaded) return;
     setError('');
     
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long.');
+    if (password.length < 15) {
+      setError('Password must be at least 15 characters long.');
       return;
     }
     
     setLoading(true);
 
     try {
-      await fetchApi('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
+      await signUp.create({
+        emailAddress: email,
+        password,
       });
-      router.push('/onboarding');
+
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+      setPendingVerification(true);
+      setLoading(false);
     } catch (err: any) {
-      setError(err.message || 'Registration failed. Please try again.');
+      console.error(err);
+      setError(err.errors?.[0]?.longMessage || err.errors?.[0]?.message || 'Registration failed. Please try again.');
       setLoading(false);
     }
   };
+
+  const onPressVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isLoaded) return;
+    setError('');
+    setLoading(true);
+
+    try {
+      const completeSignUp = await signUp.attemptEmailAddressVerification({
+        code,
+      });
+      if (completeSignUp.status !== 'complete') {
+        setError('Verification failed. Please try again.');
+        setLoading(false);
+      } else {
+        await setActive({ session: completeSignUp.createdSessionId });
+        router.replace('/sync-profile');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.errors?.[0]?.longMessage || err.errors?.[0]?.message || 'Invalid code.');
+      setLoading(false);
+    }
+  };
+
+  if (pendingVerification) {
+    return (
+      <GlassAuthLayout>
+        <div style={styles.header}>
+          <h2 style={styles.title}>Verify your email</h2>
+          <p style={styles.subtitle}>Enter the verification code sent to {email}</p>
+        </div>
+        <form onSubmit={onPressVerify} style={styles.form}>
+          {error && <div style={styles.errorAlert}>{error}</div>}
+          <div style={styles.inputGroup}>
+            <label style={styles.label}>Verification Code</label>
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              style={styles.input}
+              placeholder="Enter code"
+              required
+            />
+          </div>
+          <button type="submit" disabled={loading} style={{...styles.button, ...(loading ? styles.buttonDisabled : {})}}>
+            {loading ? 'Verifying...' : 'Verify Email'}
+          </button>
+        </form>
+      </GlassAuthLayout>
+    );
+  }
 
   const getPasswordStrength = (pass: string) => {
     if (pass.length === 0) return null;
@@ -104,14 +171,16 @@ export default function RegisterPage() {
               </span>
             )}
           </div>
-          <PasswordInput
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onFocus={() => setFocusedInput('password')}
-            onBlur={() => setFocusedInput(null)}
-            isFocused={focusedInput === 'password'}
-          />
+        <PasswordInput
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onFocus={() => setFocusedInput('password')}
+          onBlur={() => setFocusedInput(null)}
+          isFocused={focusedInput === 'password'}
+        />
         </div>
+        
+        <div id="clerk-captcha"></div>
         
         <button 
           type="submit" 
