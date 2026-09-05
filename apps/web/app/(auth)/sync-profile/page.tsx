@@ -63,9 +63,11 @@ export default function SyncProfilePage() {
             if (res.status === 401) {
               message = 'Your sign-in session has expired. Please sign in again.';
             } else if (body?.error?.message || body?.error) {
+              // eslint-disable-next-line no-console
               console.error('Sync failed', res.status, body);
             }
           } catch {
+            // eslint-disable-next-line no-console
             console.error('Sync failed', res.status);
           }
           setErrorMessage(message);
@@ -80,6 +82,7 @@ export default function SyncProfilePage() {
           router.replace('/onboarding');
         }
       } catch (e) {
+        // eslint-disable-next-line no-console
         console.error('Failed to sync profile', e);
         if (isMounted) {
           setErrorMessage('Something went wrong while connecting your account. Please try again.');

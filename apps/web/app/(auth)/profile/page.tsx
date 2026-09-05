@@ -13,24 +13,39 @@ export default function ProfilePage() {
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadData() {
+      // Step 1: Auth check
+      let userData: any = null;
       try {
-        const userData = await fetchApi('/auth/me');
-        setUser(userData);
+        userData = await fetchApi('/auth/me');
+        if (!cancelled) setUser(userData);
+      } catch {
+        if (!cancelled) router.replace('/login');
+        return;
+      }
 
+      // Step 2: Profile check - specifically handle 404 PROFILE_NOT_FOUND
+      try {
         const profileData = await fetchApi('/profile');
         if (!profileData.profile) {
-          router.push('/onboarding');
+          if (!cancelled) router.replace('/onboarding');
           return;
         }
-        setProfile(profileData.profile);
+        if (!cancelled) setProfile(profileData.profile);
       } catch (err: any) {
-        router.push('/login');
+        const msg = typeof err?.message === 'string' ? err.message : '';
+        if (msg.includes('not been created') || msg.includes('PROFILE_NOT_FOUND')) {
+          if (!cancelled) router.replace('/onboarding');
+        } else {
+          if (!cancelled) router.replace('/login');
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
     loadData();
+    return () => { cancelled = true; };
   }, [router]);
 
   if (loading) return null;

@@ -63,8 +63,9 @@ router.post('/sync', clerkRequireAuth(), async (req: Request, res: Response) => 
       profile: user.profile,
     });
   } catch (error) {
-    console.error('Sync error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Sync error:', errorMessage, error);
+    res.status(500).json({ error: 'Internal server error', details: errorMessage });
   }
 });
 
