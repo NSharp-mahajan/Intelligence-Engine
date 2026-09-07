@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { fetchApi } from '../../../lib/api';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
+import type { ProfileResponse } from '../../../lib/types';
 
 const ROLES = [
   "Software Engineer",
@@ -44,7 +45,7 @@ export default function OnboardingPage() {
     async function init() {
       try {
         await fetchApi('/auth/me');
-        const { profile } = await fetchApi('/profile');
+        const { profile } = await fetchApi<ProfileResponse>('/profile');
         if (profile) {
           setHasExistingProfile(true);
           setFormData({
@@ -60,9 +61,11 @@ export default function OnboardingPage() {
             portfolioUrl: profile.portfolioUrl || '',
           });
         }
-      } catch (e: any) {
-        if (e.message?.includes('not been created')) {
+      } catch (e: unknown) {
+        if (e instanceof Error && e.message.includes('not been created')) {
           setHasExistingProfile(false);
+        } else {
+          setError('Unable to load your existing profile. Please refresh and try again.');
         }
       } finally {
         setLoading(false);
@@ -126,8 +129,8 @@ export default function OnboardingPage() {
         }),
       });
       router.push('/portal');
-    } catch (err: any) {
-      setError(err.message || 'Failed to save profile. Please try again.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save profile. Please try again.');
       setSubmitting(false);
     }
   };

@@ -49,9 +49,10 @@ export default function RegisterPage() {
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
       setPendingVerification(true);
       setLoading(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.errors?.[0]?.longMessage || err.errors?.[0]?.message || 'Registration failed. Please try again.');
+      const clerkError = err as { errors?: Array<{ longMessage?: string; message?: string }> };
+      setError(clerkError.errors?.[0]?.longMessage || clerkError.errors?.[0]?.message || 'Registration failed. Please try again.');
       setLoading(false);
     }
   };
@@ -73,9 +74,10 @@ export default function RegisterPage() {
         await setActive({ session: completeSignUp.createdSessionId });
         router.replace('/sync-profile');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.errors?.[0]?.longMessage || err.errors?.[0]?.message || 'Invalid code.');
+      const clerkError = err as { errors?: Array<{ longMessage?: string; message?: string }> };
+      setError(clerkError.errors?.[0]?.longMessage || clerkError.errors?.[0]?.message || 'Invalid code.');
       setLoading(false);
     }
   };

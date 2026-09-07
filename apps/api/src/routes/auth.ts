@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { requireAuth as clerkRequireAuth, getAuth, clerkClient } from '@clerk/express';
 import { requireAuth, AuthRequest } from '../middlewares/authMiddleware';
+import { isProfileComplete } from '../lib/profileCompleteness';
 
 const router = Router();
 
@@ -61,11 +62,11 @@ router.post('/sync', clerkRequireAuth(), async (req: Request, res: Response) => 
       id: user.id,
       email: user.email,
       profile: user.profile,
+      profileComplete: isProfileComplete(user.profile),
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Sync error:', errorMessage, error);
-    res.status(500).json({ error: 'Internal server error', details: errorMessage });
+    console.error('Sync error:', error);
+    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
   }
 });
 
@@ -78,7 +79,7 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
     });
 
     if (!user) {
-      res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } });
       return;
     }
 
@@ -86,10 +87,11 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
       id: user.id,
       email: user.email,
       profile: user.profile,
+      profileComplete: isProfileComplete(user.profile),
     });
   } catch (error) {
     console.error('Me error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
   }
 });
 

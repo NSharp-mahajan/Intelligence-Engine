@@ -76,7 +76,7 @@ export default function SyncProfilePage() {
         }
 
         const data = await res.json();
-        if (data && data.profile) {
+        if (data?.profileComplete) {
           router.replace('/portal');
         } else {
           router.replace('/onboarding');

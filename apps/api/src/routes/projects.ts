@@ -242,8 +242,8 @@ router.post('/:projectId/skills', async (req: AuthRequest, res: Response) => {
     });
 
     res.status(201).json({ projectSkill });
-  } catch (error: any) {
-    if (error.message === 'SKILL_ALREADY_EXISTS') {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'SKILL_ALREADY_EXISTS') {
       res.status(409).json({ error: { code: 'CONFLICT', message: 'Skill is already associated with this project' } });
       return;
     }

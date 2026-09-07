@@ -6,32 +6,36 @@ import { fetchApi } from '../../../lib/api';
 import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
+import type { CandidateSkillsResponse, Profile, ProfileResponse, Project, ProjectsResponse } from '../../../lib/types';
 
 export default function PortalOverviewPage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileComplete, setProfileComplete] = useState(false);
   const [skillsCount, setSkillsCount] = useState(0);
   const [projectsCount, setProjectsCount] = useState(0);
-  const [recentProjects, setRecentProjects] = useState<any[]>([]);
+  const [recentProjects, setRecentProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     async function loadData() {
       try {
         const [profileRes, skillsRes, projectsRes] = await Promise.all([
-          fetchApi('/profile').catch(() => ({ profile: null })),
-          fetchApi('/profile/skills').catch(() => ({ candidateSkills: [] })),
-          fetchApi('/profile/projects').catch(() => ({ projects: [] }))
+          fetchApi<ProfileResponse>('/profile'),
+          fetchApi<CandidateSkillsResponse>('/profile/skills'),
+          fetchApi<ProjectsResponse>('/profile/projects')
         ]);
         
         setProfile(profileRes?.profile || null);
+        setProfileComplete(profileRes?.profileComplete || false);
         setSkillsCount(skillsRes?.candidateSkills?.length || 0);
         
         const projects = projectsRes?.projects || [];
         setProjectsCount(projects.length);
         setRecentProjects(projects.slice(0, 3)); // Top 3 recent
-      } catch (err) {
-        console.error(err);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Unable to load your dashboard. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -39,9 +43,9 @@ export default function PortalOverviewPage() {
     loadData();
   }, []);
 
-  if (loading) return null; // Can replace with a skeleton loader
+  if (loading) return <div style={styles.loading}>Loading your dashboard...</div>;
+  if (error) return <div style={styles.errorAlert}>{error}</div>;
 
-  const isProfileComplete = profile && profile.fullName && profile.university && profile.targetRole;
   const firstName = profile?.fullName ? profile.fullName.split(' ')[0] : 'Candidate';
 
   const getGreeting = () => {
@@ -62,11 +66,11 @@ export default function PortalOverviewPage() {
       <div style={styles.kpiGrid}>
         <Card style={styles.kpiCard}>
           <div style={styles.kpiCardInner}>
-            <span style={styles.kpiLabel}>PROFILE READINESS</span>
+            <span style={styles.kpiLabel}>PROFILE COMPLETENESS</span>
             <div style={styles.kpiValueContainer}>
-              <span style={styles.kpiValue}>{isProfileComplete ? '100%' : '50%'}</span>
-              <Badge variant={isProfileComplete ? 'success' : 'warning'}>
-                {isProfileComplete ? 'Ready' : 'Incomplete'}
+              <span style={styles.kpiValue}>{profileComplete ? '100%' : '0%'}</span>
+              <Badge variant={profileComplete ? 'success' : 'warning'}>
+                {profileComplete ? 'Complete' : 'Incomplete'}
               </Badge>
             </div>
           </div>
@@ -119,7 +123,7 @@ export default function PortalOverviewPage() {
               <div style={styles.infoRow}>
                 <span style={styles.infoLabel}>Profile Status</span>
                 <span style={styles.infoValue}>
-                  {isProfileComplete ? (
+                  {profileComplete ? (
                     <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--success-text)' }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"/></svg>
                       All core fields provided
@@ -129,7 +133,7 @@ export default function PortalOverviewPage() {
                   )}
                 </span>
               </div>
-              {!isProfileComplete && (
+              {!profileComplete && (
                 <div style={{ marginTop: '1.5rem' }}>
                   <Button variant="outline" onClick={() => router.push('/onboarding')}>Complete Profile</Button>
                 </div>
@@ -157,7 +161,7 @@ export default function PortalOverviewPage() {
                   </div>
                   <h3 style={styles.emptyStateTitle}>No project evidence yet</h3>
                   <p style={styles.emptyStateText}>
-                    Add your first project so Career Intelligence can begin evaluating your technical capabilities.
+                    Add your first project so Career Intelligence can begin evaluating your technical evidence.
                   </p>
                   <Button variant="outline" onClick={() => router.push('/evidence')}>Add Project</Button>
                 </div>
@@ -167,7 +171,7 @@ export default function PortalOverviewPage() {
                     <div key={project.id} style={styles.recentProjectItem}>
                       <span style={styles.recentProjectName}>{project.name}</span>
                       <div style={styles.recentProjectSkills}>
-                        {project.projectSkills?.slice(0, 4).map((ps: any) => (
+                        {project.projectSkills?.slice(0, 4).map((ps) => (
                           <Badge key={ps.skillId} variant="neutral">{ps.skill.name}</Badge>
                         ))}
                         {(project.projectSkills?.length || 0) > 4 && (
@@ -196,11 +200,11 @@ export default function PortalOverviewPage() {
                   <line x1="12" y1="8" x2="12.01" y2="8"></line>
                 </svg>
               </div>
-              <h3 style={styles.emptyStateTitle}>Matching Engine Paused</h3>
+              <h3 style={styles.emptyStateTitle}>Matching Not Analyzed</h3>
               <p style={styles.emptyStateText}>
-                The intelligence engine requires both verified skills and project evidence to evaluate your fit against the current market. Add evidence to begin analysis.
+                Intelligent opportunity matching has not been analyzed yet. Browse available opportunities in the meantime.
               </p>
-              <Button variant="primary" disabled>View Opportunities</Button>
+              <Button variant="primary" onClick={() => router.push('/opportunities')}>View Opportunities</Button>
             </CardBody>
           </Card>
         </div>
@@ -210,6 +214,20 @@ export default function PortalOverviewPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
+  loading: {
+    minHeight: '240px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'var(--text-secondary)',
+  },
+  errorAlert: {
+    backgroundColor: 'var(--error-bg)',
+    color: 'var(--error-text)',
+    padding: '1rem',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--error-border)',
+  },
   container: {
     display: 'flex',
     flexDirection: 'column',

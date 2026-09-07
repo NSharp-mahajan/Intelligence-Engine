@@ -4,14 +4,16 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useClerk } from '@clerk/nextjs';
-import { fetchApi } from '../../lib/api';
+import { ApiError, fetchApi } from '../../lib/api';
 import { Logo } from '../../components/ui/Logo';
+import type { User } from '../../lib/types';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const isOnboarding = pathname === '/onboarding';
@@ -28,10 +30,18 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       }
 
       try {
-        const userData = await fetchApi('/auth/me');
+        const userData = await fetchApi<User>('/auth/me');
+        if (!isOnboarding && !userData.profileComplete) {
+          router.replace('/onboarding');
+          return;
+        }
         setUser(userData);
-      } catch (err: any) {
-        router.push('/login');
+      } catch (err: unknown) {
+        if (err instanceof ApiError && err.status === 401) {
+          router.replace('/login');
+        } else {
+          setError('Unable to load your workspace. Please refresh and try again.');
+        }
       } finally {
         setLoading(false);
       }
@@ -61,6 +71,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="animate-fade-in" style={styles.spinner}>Loading workspace...</div>
       </div>
     );
+  }
+
+  if (error) {
+    return <div style={styles.loadingContainer}><div style={styles.spinner}>{error}</div></div>;
   }
 
   if (isSyncProfile) return <>{children}</>;

@@ -94,6 +94,29 @@ enum OpportunityType {
   MICRO_INTERNSHIP
 }
 
+enum WorkMode {
+  REMOTE
+  HYBRID
+  ONSITE
+  UNKNOWN
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  INTERNSHIP
+  CONTRACT
+  UNKNOWN
+}
+
+enum ExperienceLevel {
+  ENTRY
+  JUNIOR
+  MID
+  SENIOR
+  UNKNOWN
+}
+
 model Opportunity {
   id                String             @id @default(uuid())
   title             String
@@ -101,12 +124,27 @@ model Opportunity {
   description       String
   type              OpportunityType
   location          String?
+  workMode          WorkMode           @default(UNKNOWN)
+  employmentType    EmploymentType     @default(UNKNOWN)
+  experienceLevel   ExperienceLevel    @default(UNKNOWN)
   applicationUrl    String
   source            String
+  sourceUrl         String?
+  sourceJobId       String?
+  postedDate        DateTime?
   deadline          DateTime?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   opportunitySkills OpportunitySkill[]
+
+  @@unique([source, sourceJobId])
+  @@index([type])
+  @@index([workMode])
+  @@index([employmentType])
+  @@index([experienceLevel])
+  @@index([location])
+  @@index([postedDate])
+  @@index([deadline])
 }
 
 enum RequirementType {

@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middlewares/authMiddleware';
+import { isProfileComplete } from '../lib/profileCompleteness';
 import projectRoutes from './projects';
 import profileSkillsRoutes from './profileSkills';
 
@@ -37,7 +38,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    res.json({ profile });
+    res.json({ profile, profileComplete: isProfileComplete(profile) });
   } catch (error) {
     console.error('Get profile error:', error);
     res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
@@ -72,9 +73,9 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
         linkedinUrl: linkedinUrl || null,
         portfolioUrl: portfolioUrl || null,
       },
-    });
+    });z
 
-    res.status(201).json({ profile });
+    res.status(201).json({ profile, profileComplete: isProfileComplete(profile) });
   } catch (error) {
     console.error('Create profile error:', error);
     res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
@@ -111,7 +112,7 @@ router.put('/', requireAuth, async (req: AuthRequest, res: Response) => {
       },
     });
 
-    res.json({ profile });
+    res.json({ profile, profileComplete: isProfileComplete(profile) });
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });

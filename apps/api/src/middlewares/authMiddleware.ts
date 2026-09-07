@@ -4,7 +4,7 @@ import { requireAuth as clerkRequireAuth, getAuth } from '@clerk/express';
 
 export interface AuthRequest extends Request {
   userId?: string;
-  auth?: any;
+  auth?: ReturnType<typeof getAuth>;
 }
 
 export const requireAuth = [
@@ -13,7 +13,7 @@ export const requireAuth = [
     try {
       const auth = getAuth(req);
       if (!auth || !auth.userId) {
-        res.status(401).json({ error: 'Unauthorized: No Clerk session' });
+        res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } });
         return;
       }
 
@@ -22,7 +22,7 @@ export const requireAuth = [
       });
 
       if (!user) {
-        res.status(401).json({ error: 'Unauthorized: No internal user mapping found.' });
+        res.status(401).json({ error: { code: 'USER_NOT_MAPPED', message: 'Account is not available.' } });
         return;
       }
 
@@ -31,7 +31,7 @@ export const requireAuth = [
       next();
     } catch (error) {
       console.error('Session validation error:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
       return;
     }
   }

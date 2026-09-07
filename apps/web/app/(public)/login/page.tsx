@@ -44,9 +44,10 @@ export default function LoginPage() {
         setError('Sign in requires additional steps.');
         setLoading(false);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.errors?.[0]?.longMessage || err.errors?.[0]?.message || 'Incorrect credentials. Please try again.');
+      const clerkError = err as { errors?: Array<{ longMessage?: string; message?: string }> };
+      setError(clerkError.errors?.[0]?.longMessage || clerkError.errors?.[0]?.message || 'Incorrect credentials. Please try again.');
       setLoading(false);
     }
   };

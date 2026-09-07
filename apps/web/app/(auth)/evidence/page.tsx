@@ -7,31 +7,33 @@ import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Modal } from '../../../components/ui/Modal';
 import { Input } from '../../../components/ui/Input';
+import type { CandidateSkill, Project, ProjectSkill, CandidateSkillsResponse, ProjectsResponse } from '../../../lib/types';
 
-interface Skill {
-  id: string;
-  name: string;
-  category: string;
+interface SkillModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: (skill: CandidateSkill) => void;
 }
 
-interface CandidateSkill {
-  skillId: string;
-  proficiency: string | null;
-  skill: Skill;
+interface ProjectModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  project: Project | null;
+  onSuccess: () => void;
 }
 
-interface ProjectSkill {
-  skillId: string;
-  skill: Skill;
+interface DeleteProjectModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  project: Project | null;
+  onSuccess: () => void;
 }
 
-interface Project {
-  id: string;
-  name: string;
-  description: string;
-  githubUrl: string | null;
-  liveUrl: string | null;
-  projectSkills: ProjectSkill[];
+interface AddProjectSkillModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  project: Project | null;
+  onSuccess: (skill: ProjectSkill) => void;
 }
 
 export default function EvidencePage() {
@@ -59,12 +61,12 @@ export default function EvidencePage() {
     setError('');
     try {
       const [skillsRes, projectsRes] = await Promise.all([
-        fetchApi('/profile/skills'),
-        fetchApi('/profile/projects')
+        fetchApi<CandidateSkillsResponse>('/profile/skills'),
+        fetchApi<ProjectsResponse>('/profile/projects')
       ]);
       setCandidateSkills(skillsRes.candidateSkills || []);
       setProjects(projectsRes.projects || []);
-    } catch (err: any) {
+    } catch {
       setError('Unable to load your evidence. Please try again.');
     } finally {
       setLoading(false);
@@ -75,8 +77,8 @@ export default function EvidencePage() {
     try {
       await fetchApi(`/profile/skills/${skillId}`, { method: 'DELETE' });
       setCandidateSkills(prev => prev.filter(s => s.skillId !== skillId));
-    } catch (err: any) {
-      alert(err.message || 'Failed to remove skill');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to remove skill');
     }
   };
 
@@ -89,8 +91,8 @@ export default function EvidencePage() {
         }
         return p;
       }));
-    } catch (err: any) {
-      alert(err.message || 'Failed to remove skill from project');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to remove skill from project');
     }
   };
 
@@ -109,7 +111,12 @@ export default function EvidencePage() {
         <p style={styles.subtitle}>Build the evidence behind your career profile.</p>
       </header>
 
-      {error && <div style={styles.errorAlert}>{error}</div>}
+      {error && (
+        <div style={styles.errorAlert}>
+          <span>{error}</span>
+          <Button variant="outline" size="sm" onClick={loadData}>Try Again</Button>
+        </div>
+      )}
 
       <div style={styles.section}>
         <div style={styles.sectionHeader}>
@@ -121,7 +128,7 @@ export default function EvidencePage() {
           <CardBody>
             {candidateSkills.length === 0 ? (
               <div style={styles.emptyState}>
-                <p>No skills added yet. Add verified technical skills to activate matching.</p>
+                <p>Add your verified technical skills to strengthen your evidence.</p>
               </div>
             ) : (
               <div style={styles.skillsList}>
@@ -156,7 +163,7 @@ export default function EvidencePage() {
           <Card>
             <CardBody>
               <div style={styles.emptyState}>
-                <p>No project evidence yet.</p>
+                <p>Add your first project so Career Intelligence can begin evaluating your technical evidence.</p>
                 <div style={{ marginTop: '1rem' }}>
                   <Button variant="outline" onClick={() => { setEditingProject(null); setProjectModalOpen(true); }}>+ Add Project</Button>
                 </div>
@@ -283,7 +290,7 @@ export default function EvidencePage() {
 }
 
 // --- Sub Components ---
-function AddSkillModal({ isOpen, onClose, onSuccess }: any) {
+function AddSkillModal({ isOpen, onClose, onSuccess }: SkillModalProps) {
   const [skillName, setSkillName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -295,14 +302,14 @@ function AddSkillModal({ isOpen, onClose, onSuccess }: any) {
     setError('');
     
     try {
-      const res = await fetchApi('/profile/skills', {
+      const res = await fetchApi<{ candidateSkill: CandidateSkill }>('/profile/skills', {
         method: 'POST',
         body: JSON.stringify({ skillName }),
       });
       onSuccess(res.candidateSkill);
       setSkillName('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to add skill');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to add skill');
     } finally {
       setLoading(false);
     }
@@ -330,7 +337,7 @@ function AddSkillModal({ isOpen, onClose, onSuccess }: any) {
   );
 }
 
-function ProjectModal({ isOpen, onClose, project, onSuccess }: any) {
+function ProjectModal({ isOpen, onClose, project, onSuccess }: ProjectModalProps) {
   const [formData, setFormData] = useState({ name: '', description: '', githubUrl: '', liveUrl: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -361,8 +368,8 @@ function ProjectModal({ isOpen, onClose, project, onSuccess }: any) {
         await fetchApi('/profile/projects', { method: 'POST', body: JSON.stringify(payload) });
       }
       onSuccess();
-    } catch (err: any) {
-      setError(err.message || 'Failed to save project');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save project');
     } finally {
       setLoading(false);
     }
@@ -394,7 +401,7 @@ function ProjectModal({ isOpen, onClose, project, onSuccess }: any) {
   );
 }
 
-function DeleteProjectModal({ isOpen, onClose, project, onSuccess }: any) {
+function DeleteProjectModal({ isOpen, onClose, project, onSuccess }: DeleteProjectModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -405,8 +412,8 @@ function DeleteProjectModal({ isOpen, onClose, project, onSuccess }: any) {
     try {
       await fetchApi(`/profile/projects/${project.id}`, { method: 'DELETE' });
       onSuccess();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete project');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to delete project');
     } finally {
       setLoading(false);
     }
@@ -430,7 +437,7 @@ function DeleteProjectModal({ isOpen, onClose, project, onSuccess }: any) {
   );
 }
 
-function AddProjectSkillModal({ isOpen, onClose, project, onSuccess }: any) {
+function AddProjectSkillModal({ isOpen, onClose, project, onSuccess }: AddProjectSkillModalProps) {
   const [skillName, setSkillName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -442,11 +449,11 @@ function AddProjectSkillModal({ isOpen, onClose, project, onSuccess }: any) {
     setError('');
     
     try {
-      const res = await fetchApi(`/profile/projects/${project.id}/skills`, { method: 'POST', body: JSON.stringify({ skillName }) });
+      const res = await fetchApi<{ projectSkill: ProjectSkill }>(`/profile/projects/${project.id}/skills`, { method: 'POST', body: JSON.stringify({ skillName }) });
       onSuccess(res.projectSkill);
       setSkillName('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to attach skill');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to attach skill');
     } finally {
       setLoading(false);
     }
@@ -499,6 +506,10 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
   },
   errorAlert: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '1rem',
     backgroundColor: 'var(--error-bg)',
     color: 'var(--error-text)',
     padding: '1rem',
