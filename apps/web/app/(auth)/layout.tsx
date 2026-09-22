@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useClerk } from '@clerk/nextjs';
 import { ApiError, fetchApi } from '../../lib/api';
 import { Logo } from '../../components/ui/Logo';
+import { DiscoveryWorkspaceLayout } from '../../components/discovery/DiscoveryWorkspaceLayout';
 import type { User } from '../../lib/types';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -91,6 +92,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <main style={styles.onboardingMain}>{children}</main>
       </div>
     );
+  }
+
+  if (pathname === '/opportunities' || pathname.startsWith('/opportunities/')) {
+    return <DiscoveryWorkspaceLayout user={user} onSignOut={handleLogout}>{children}</DiscoveryWorkspaceLayout>;
   }
 
   return (

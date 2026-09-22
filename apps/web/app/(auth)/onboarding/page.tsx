@@ -232,7 +232,7 @@ export default function OnboardingPage() {
             {step === 1 && (
               <div className="animate-fade-in" style={styles.stepContent}>
                 <h2 style={styles.stepTitle}>Start with the basics.</h2>
-                <p style={styles.stepSubtitle}>Tell us who you are and where you're coming from. Your academic background helps us understand your career stage and context.</p>
+                <p style={styles.stepSubtitle}>Tell us who you are and where you&apos;re coming from. Your academic background helps us understand your career stage and context.</p>
                 
                 <div style={styles.formGrid}>
                   <Input 
@@ -266,7 +266,7 @@ export default function OnboardingPage() {
             {step === 2 && (
               <div className="animate-fade-in" style={styles.stepContent}>
                 <h2 style={styles.stepTitle}>Where are you heading?</h2>
-                <p style={styles.stepSubtitle}>Tell us what kind of opportunities you're preparing for. This gives the matching engine a direction. Your evidence will determine how strongly you align.</p>
+                <p style={styles.stepSubtitle}>Tell us what kind of opportunities you&#39;re preparing for. This gives the matching engine a direction. Your evidence will determine how strongly you align.</p>
                 
                 <div style={styles.formGrid}>
                   <div>

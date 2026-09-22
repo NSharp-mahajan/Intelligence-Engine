@@ -115,18 +115,18 @@ async function main() {
       preferredSkills: ['AWS', 'Docker'],
     };
     
-    const normalized = normalizer.normalize(externalJob);
-    console.log('  Title trimmed:', normalized.title === externalJob.title.trim() ? 'PASS' : 'FAIL');
-    console.log('  Skills normalized:', normalized.requiredSkills.every(s => s === s.toLowerCase()) ? 'PASS' : 'FAIL');
-    console.log('  Work mode:', normalized.workMode === 'REMOTE' ? 'PASS' : 'FAIL');
-    console.log('  Employment type:', normalized.employmentType === 'FULL_TIME' ? 'PASS' : 'FAIL');
-    console.log('  Experience level:', normalized.experienceLevel === 'SENIOR' ? 'PASS' : 'FAIL');
+    const normalizedJob = normalizer.normalize(externalJob);
+    console.log('  Title trimmed:', normalizedJob.title === externalJob.title.trim() ? 'PASS' : 'FAIL');
+    console.log('  Skills normalized:', normalizedJob.requiredSkills.every(s => s === s.toLowerCase()) ? 'PASS' : 'FAIL');
+    console.log('  Work mode:', normalizedJob.workMode === 'REMOTE' ? 'PASS' : 'FAIL');
+    console.log('  Employment type:', normalizedJob.employmentType === 'FULL_TIME' ? 'PASS' : 'FAIL');
+    console.log('  Experience level:', normalizedJob.experienceLevel === 'SENIOR' ? 'PASS' : 'FAIL');
     console.log();
 
     // Test 7: Deduplication Key Generation
     console.log('Test 7: Deduplication Key Generation');
     const deduplicator = new OpportunityDeduplicator();
-    const key = deduplicator.generateDeduplicationKey(normalized);
+    const key = deduplicator.generateDeduplicationKey(normalizedJob);
     console.log('  Generated key:', key);
     console.log('  Result:', key.includes('test') && key.includes('test-123') ? 'PASS' : 'FAIL');
     console.log();

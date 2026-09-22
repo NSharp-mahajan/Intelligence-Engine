@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { requireAuth as clerkRequireAuth, getAuth, clerkClient } from '@clerk/express';
 import { requireAuth, AuthRequest } from '../middlewares/authMiddleware';
@@ -65,8 +66,25 @@ router.post('/sync', clerkRequireAuth(), async (req: Request, res: Response) => 
       profileComplete: isProfileComplete(user.profile),
     });
   } catch (error) {
-    console.error('Sync error:', error);
-    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
+    const prismaError = error instanceof Prisma.PrismaClientKnownRequestError ? {
+      code: error.code,
+      modelName: error.meta?.modelName,
+    } : undefined;
+
+    console.error('Sync error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      prisma: prismaError,
+    });
+
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: process.env.NODE_ENV === 'production'
+          ? 'Internal server error'
+          : 'Profile sync failed',
+        ...(prismaError ? { details: prismaError } : {}),
+      },
+    });
   }
 });
 

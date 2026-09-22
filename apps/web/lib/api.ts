@@ -47,8 +47,8 @@ export async function fetchApi<T = unknown>(endpoint: string, options: RequestIn
       try {
         const token = await clerk.session.getToken();
         if (token) headers.set('Authorization', `Bearer ${token}`);
-      } catch {
-        console.warn('Failed to get Clerk token', e);
+      } catch (err) {
+        console.warn('Failed to get Clerk token', err);
       }
     }
   }
