@@ -48,8 +48,12 @@ function sanitizeHtmlClientSide(html: string): string {
       const name = attr.name.toLowerCase();
       const value = attr.value.toLowerCase();
 
-      // Remove event handlers, style attributes, and javascript: links
-      if (name.startsWith('on') || name === 'style' || value.startsWith('javascript:')) {
+      // Remove event handlers, style attributes, and dangerous URL schemes
+      if (
+        name.startsWith('on') || 
+        name === 'style' || 
+        /^[\s\x00-\x1F]*(javascript|vbscript|data):/i.test(value)
+      ) {
         el.removeAttribute(attr.name);
       }
     }

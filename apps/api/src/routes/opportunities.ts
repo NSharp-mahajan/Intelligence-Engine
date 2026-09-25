@@ -15,8 +15,8 @@ const listQuerySchema = z.object({
   experienceLevel: z.enum(['ENTRY', 'JUNIOR', 'MID', 'SENIOR', 'UNKNOWN']).optional(),
   source: z.string().optional(),
   skill: z.string().optional(),
-  page: z.string().optional().transform(val => val ? parseInt(val, 10) : 1),
-  limit: z.string().optional().transform(val => val ? parseInt(val, 10) : 20),
+  page: z.string().optional().transform(val => (val ? Number(val) : 1)).pipe(z.number().int().positive()),
+  limit: z.string().optional().transform(val => (val ? Number(val) : 20)).pipe(z.number().int().positive().max(100)),
 });
 
 router.get('/', async (req: any, res: Response) => {
@@ -84,7 +84,11 @@ router.get('/', async (req: any, res: Response) => {
             }
           }
         },
-        orderBy: { postedDate: 'desc' },
+        orderBy: [
+          { postedDate: 'desc' },
+          { createdAt: 'desc' },
+          { id: 'asc' }
+        ],
         skip: (page - 1) * limit,
         take: limit,
       }),
