@@ -6,6 +6,7 @@ const router = Router();
 
 // GET /api/opportunities - List opportunities with filtering and pagination
 const listQuerySchema = z.object({
+  search: z.string().optional(),
   title: z.string().optional(),
   location: z.string().optional(),
   type: z.enum(['INTERNSHIP', 'JOB', 'HACKATHON', 'WORKSHOP', 'OPEN_SOURCE', 'MICRO_INTERNSHIP']).optional(),
@@ -26,11 +27,16 @@ router.get('/', async (req: any, res: Response) => {
       return;
     }
 
-    const { title, location, type, workMode, employmentType, experienceLevel, source, skill, page = 1, limit = 20 } = parsed.data;
+    const { search, title, location, type, workMode, employmentType, experienceLevel, source, skill, page = 1, limit = 20 } = parsed.data;
 
     const where: any = {};
 
-    if (title) {
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { organization: { contains: search, mode: 'insensitive' } }
+      ];
+    } else if (title) {
       where.title = { contains: title, mode: 'insensitive' };
     }
 

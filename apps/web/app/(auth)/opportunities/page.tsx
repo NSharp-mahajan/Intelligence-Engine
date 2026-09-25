@@ -1,9 +1,11 @@
 'use client';
 
-import React, { Suspense, useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import React, { Suspense, useEffect, useState, useCallback, useRef } from 'react';
+import Link from 'next/link';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { fetchApi } from '../../../lib/api';
 import { Badge } from '../../../components/ui/Badge';
+import { Button } from '../../../components/ui/Button';
 import type { OpportunitiesResponse, Opportunity } from '../../../lib/types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -28,21 +30,17 @@ function OpportunityCard({ opp }: { opp: Opportunity }) {
 
   return (
     <article style={card.root} className="opp-card">
-      {/* Row 1: title + CTA */}
       <div style={card.topRow}>
         <h2 style={card.title}>{opp.title}</h2>
-        <a
-          href={opp.applicationUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          href={`/opportunities/${opp.id}`}
           style={card.viewLink}
           className="opp-view-link"
         >
           View opportunity&nbsp;↗
-        </a>
+        </Link>
       </div>
 
-      {/* Row 2: company · location */}
       <div style={card.metaRow}>
         <span style={card.company}>{opp.organization}</span>
         {opp.location && (
@@ -53,7 +51,6 @@ function OpportunityCard({ opp }: { opp: Opportunity }) {
         )}
       </div>
 
-      {/* Row 3: badges */}
       {(opp.workMode !== 'UNKNOWN' || opp.employmentType !== 'UNKNOWN' || opp.experienceLevel !== 'UNKNOWN') && (
         <div style={card.badgeRow}>
           {opp.workMode !== 'UNKNOWN' && (
@@ -68,7 +65,6 @@ function OpportunityCard({ opp }: { opp: Opportunity }) {
         </div>
       )}
 
-      {/* Row 4: posted + source */}
       <div style={card.footerRow}>
         {postedLabel && <span>Posted {postedLabel}</span>}
         {postedLabel && <span style={card.sep}>·</span>}
@@ -176,8 +172,8 @@ function PaginationControl({
         Page {page} of {totalPages}
       </span>
       <button
-        style={{ ...pg.btn, ...(page >= totalPages ? pg.disabled : {}) }}
-        disabled={page >= totalPages}
+        style={{ ...pg.btn, ...(page >= totalPages || totalPages === 0 ? pg.disabled : {}) }}
+        disabled={page >= totalPages || totalPages === 0}
         onClick={onNext}
         className="pg-btn"
       >
@@ -224,18 +220,89 @@ const pg: Record<string, React.CSSProperties> = {
   },
 };
 
+// ─── Filters ─────────────────────────────────────────────────────────────────
+
+const FILTER_OPTIONS = {
+  type: ['INTERNSHIP', 'JOB', 'HACKATHON', 'WORKSHOP', 'OPEN_SOURCE', 'MICRO_INTERNSHIP'],
+  workMode: ['REMOTE', 'HYBRID', 'ONSITE', 'UNKNOWN'],
+  employmentType: ['FULL_TIME', 'PART_TIME', 'INTERNSHIP', 'CONTRACT', 'UNKNOWN'],
+  experienceLevel: ['ENTRY', 'JUNIOR', 'MID', 'SENIOR', 'UNKNOWN'],
+};
+
 // ─── Main content ─────────────────────────────────────────────────────────────
 
 function OpportunitiesContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const pathname = usePathname();
 
+  // Extract query parameters
   const pageParam = searchParams.get('page');
   const page = pageParam ? parseInt(pageParam, 10) : 1;
+  const search = searchParams.get('search') || '';
+  const type = searchParams.get('type') || '';
+  const workMode = searchParams.get('workMode') || '';
+  const employmentType = searchParams.get('employmentType') || '';
+  const experienceLevel = searchParams.get('experienceLevel') || '';
+
+  // Local state for the search input so it can be typed into without triggering a fetch on every keystroke
+  const [searchInput, setSearchInput] = useState(search);
+
+  // Update local search input if URL changes (e.g. back button)
+  useEffect(() => {
+    setSearchInput(search);
+  }, [search]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [data, setData] = useState<OpportunitiesResponse | null>(null);
+
+  // Update URL helper
+  const updateQuery = useCallback((updates: Record<string, string | null>) => {
+    const params = new URLSearchParams(searchParams.toString());
+    let hasChanges = false;
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null || value === '') {
+        if (params.has(key)) {
+          params.delete(key);
+          hasChanges = true;
+        }
+      } else {
+        if (params.get(key) !== value) {
+          params.set(key, value);
+          hasChanges = true;
+        }
+      }
+    }
+
+    if (hasChanges) {
+      router.push(`${pathname}?${params.toString()}`);
+    }
+  }, [searchParams, pathname, router]);
+
+  const handleFilterChange = (key: string, value: string) => {
+    updateQuery({ [key]: value, page: '1' });
+  };
+
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    updateQuery({ search: searchInput, page: '1' });
+  };
+
+  const clearFilters = () => {
+    setSearchInput('');
+    updateQuery({
+      search: null,
+      type: null,
+      workMode: null,
+      employmentType: null,
+      experienceLevel: null,
+      page: '1',
+    });
+  };
+
+  const hasActiveFilters = Boolean(search || type || workMode || employmentType || experienceLevel);
 
   useEffect(() => {
     let cancelled = false;
@@ -244,7 +311,16 @@ function OpportunitiesContent() {
       setLoading(true);
       setError('');
       try {
-        const result = await fetchApi<OpportunitiesResponse>(`/opportunities?page=${page}&limit=20`);
+        const params = new URLSearchParams();
+        params.set('page', page.toString());
+        params.set('limit', '20');
+        if (search) params.set('search', search);
+        if (type) params.set('type', type);
+        if (workMode) params.set('workMode', workMode);
+        if (employmentType) params.set('employmentType', employmentType);
+        if (experienceLevel) params.set('experienceLevel', experienceLevel);
+
+        const result = await fetchApi<OpportunitiesResponse>(`/opportunities?${params.toString()}`);
         if (!cancelled) {
           setData(result);
         }
@@ -262,35 +338,19 @@ function OpportunitiesContent() {
     loadOpportunities();
 
     return () => { cancelled = true; };
-  }, [page]);
+  }, [page, search, type, workMode, employmentType, experienceLevel]);
 
   const handleNext = () => {
     if (data && page < data.pagination.totalPages) {
-      router.push(`/opportunities?page=${page + 1}`);
+      updateQuery({ page: (page + 1).toString() });
     }
   };
 
   const handlePrev = () => {
     if (page > 1) {
-      router.push(`/opportunities?page=${page - 1}`);
+      updateQuery({ page: (page - 1).toString() });
     }
   };
-
-  if (loading && !data) {
-    return <div style={pageStyles.stateBox}>Loading opportunities…</div>;
-  }
-
-  if (error) {
-    return (
-      <div style={pageStyles.wrap}>
-        <div style={pageStyles.errorAlert}>{error}</div>
-      </div>
-    );
-  }
-
-  if (!data) {
-    return <div style={pageStyles.stateBox}>No data available.</div>;
-  }
 
   return (
     <div style={pageStyles.wrap} className="animate-fade-in">
@@ -299,33 +359,105 @@ function OpportunitiesContent() {
         <h1 style={pageStyles.title}>Opportunity Discovery</h1>
         <p style={pageStyles.subtitle}>
           Explore roles, internships, and programs from curated sources.
-          {data && (
-            <span style={pageStyles.count}>&nbsp;{data.pagination.total} opportunities</span>
-          )}
         </p>
       </header>
 
-      {/* Listing */}
-      {data.opportunities.length === 0 ? (
+      {/* Toolbar */}
+      <div style={pageStyles.toolbar}>
+        <form onSubmit={handleSearchSubmit} style={pageStyles.searchForm}>
+          <input
+            type="text"
+            placeholder="Search by role or company..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            style={pageStyles.searchInput}
+          />
+          <Button type="submit" variant="secondary" size="sm">Search</Button>
+        </form>
+
+        <div style={pageStyles.filtersRow}>
+          <select 
+            value={type} 
+            onChange={(e) => handleFilterChange('type', e.target.value)}
+            style={pageStyles.select}
+          >
+            <option value="">All Types</option>
+            {FILTER_OPTIONS.type.map(opt => <option key={opt} value={opt}>{fmtEnum(opt)}</option>)}
+          </select>
+
+          <select 
+            value={workMode} 
+            onChange={(e) => handleFilterChange('workMode', e.target.value)}
+            style={pageStyles.select}
+          >
+            <option value="">All Work Modes</option>
+            {FILTER_OPTIONS.workMode.map(opt => <option key={opt} value={opt}>{fmtEnum(opt)}</option>)}
+          </select>
+
+          <select 
+            value={employmentType} 
+            onChange={(e) => handleFilterChange('employmentType', e.target.value)}
+            style={pageStyles.select}
+          >
+            <option value="">All Employment</option>
+            {FILTER_OPTIONS.employmentType.map(opt => <option key={opt} value={opt}>{fmtEnum(opt)}</option>)}
+          </select>
+
+          <select 
+            value={experienceLevel} 
+            onChange={(e) => handleFilterChange('experienceLevel', e.target.value)}
+            style={pageStyles.select}
+          >
+            <option value="">All Experience</option>
+            {FILTER_OPTIONS.experienceLevel.map(opt => <option key={opt} value={opt}>{fmtEnum(opt)}</option>)}
+          </select>
+        </div>
+
+        <div style={pageStyles.toolbarFooter}>
+          {loading ? (
+            <span style={pageStyles.resultsCount}>Loading...</span>
+          ) : data ? (
+            <span style={pageStyles.resultsCount}>{data.pagination.total} opportunities found</span>
+          ) : (
+            <span style={pageStyles.resultsCount}>&nbsp;</span>
+          )}
+
+          {hasActiveFilters && (
+            <button onClick={clearFilters} style={pageStyles.clearFiltersBtn}>
+              Clear filters
+            </button>
+          )}
+        </div>
+      </div>
+
+      {error ? (
+        <div style={pageStyles.errorAlert}>{error}</div>
+      ) : loading && !data ? (
+        <div style={pageStyles.stateBox}>Loading opportunities…</div>
+      ) : !data || data.opportunities.length === 0 ? (
         <div style={pageStyles.emptyState}>
-          <p>No opportunities found.</p>
+          <p>No opportunities found matching your filters.</p>
+          {hasActiveFilters && (
+            <Button variant="outline" onClick={clearFilters} style={{ marginTop: '16px' }}>
+              Clear Filters
+            </Button>
+          )}
         </div>
       ) : (
-        <div style={pageStyles.list}>
-          {data.opportunities.map((opp: Opportunity) => (
-            <OpportunityCard key={opp.id} opp={opp} />
-          ))}
-        </div>
-      )}
+        <>
+          <div style={pageStyles.list}>
+            {data.opportunities.map((opp: Opportunity) => (
+              <OpportunityCard key={opp.id} opp={opp} />
+            ))}
+          </div>
 
-      {/* Pagination */}
-      {data.pagination.totalPages > 1 && (
-        <PaginationControl
-          page={data.pagination.page}
-          totalPages={data.pagination.totalPages}
-          onPrev={handlePrev}
-          onNext={handleNext}
-        />
+          <PaginationControl
+            page={data.pagination.page}
+            totalPages={data.pagination.totalPages}
+            onPrev={handlePrev}
+            onNext={handleNext}
+          />
+        </>
       )}
 
       {/* Scoped hover styles */}
@@ -363,7 +495,7 @@ const pageStyles: Record<string, React.CSSProperties> = {
     gap: '0',
   },
   header: {
-    marginBottom: '28px',
+    marginBottom: '24px',
   },
   title: {
     fontSize: '1.5rem',
@@ -378,9 +510,64 @@ const pageStyles: Record<string, React.CSSProperties> = {
     color: 'var(--text-secondary)',
     margin: 0,
   },
-  count: {
-    color: 'var(--text-tertiary)',
+  toolbar: {
+    backgroundColor: 'var(--bg-surface)',
+    border: '1px solid var(--border-light)',
+    borderRadius: 'var(--radius-lg)',
+    padding: '16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    marginBottom: '24px',
+  },
+  searchForm: {
+    display: 'flex',
+    gap: '8px',
+  },
+  searchInput: {
+    flex: 1,
+    padding: '8px 12px',
+    border: '1px solid var(--border-light)',
+    borderRadius: 'var(--radius-md)',
     fontSize: '0.875rem',
+    fontFamily: 'inherit',
+    outline: 'none',
+  },
+  filtersRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  select: {
+    padding: '6px 10px',
+    border: '1px solid var(--border-light)',
+    borderRadius: 'var(--radius-md)',
+    fontSize: '0.8125rem',
+    fontFamily: 'inherit',
+    backgroundColor: 'var(--bg-primary)',
+    color: 'var(--text-primary)',
+    outline: 'none',
+    cursor: 'pointer',
+  },
+  toolbarFooter: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: '4px',
+  },
+  resultsCount: {
+    fontSize: '0.8125rem',
+    color: 'var(--text-secondary)',
+    fontWeight: 500,
+  },
+  clearFiltersBtn: {
+    background: 'none',
+    border: 'none',
+    padding: '4px 8px',
+    fontSize: '0.8125rem',
+    color: 'var(--accent-primary)',
+    fontWeight: 500,
+    cursor: 'pointer',
   },
   stateBox: {
     minHeight: '280px',
