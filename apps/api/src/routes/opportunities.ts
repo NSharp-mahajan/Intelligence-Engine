@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
+import { requireAuth, AuthRequest } from '../middlewares/authMiddleware';
+import { MatchingService } from '../services/matchingService';
 
 const router = Router();
 
@@ -21,7 +23,13 @@ const listQuerySchema = z.object({
 
 router.get('/', async (req: any, res: Response) => {
   try {
-    const parsed = listQuerySchema.safeParse(req.query);
+    // Handle potential array values from query params
+    const normalizedQuery: any = {};
+    for (const [key, value] of Object.entries(req.query)) {
+      normalizedQuery[key] = Array.isArray(value) ? value[0] : value;
+    }
+
+    const parsed = listQuerySchema.safeParse(normalizedQuery);
     if (!parsed.success) {
       res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid query parameters', details: parsed.error.format() } });
       return;
@@ -114,9 +122,10 @@ router.get('/', async (req: any, res: Response) => {
 router.get('/:opportunityId', async (req: any, res: Response) => {
   try {
     const { opportunityId } = req.params;
+    const id = Array.isArray(opportunityId) ? opportunityId[0] : opportunityId;
 
     const opportunity = await prisma.opportunity.findUnique({
-      where: { id: opportunityId },
+      where: { id },
       include: {
         opportunitySkills: {
           include: {
@@ -134,6 +143,49 @@ router.get('/:opportunityId', async (req: any, res: Response) => {
     res.json({ opportunity });
   } catch (error) {
     console.error('Get opportunity error:', error);
+    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
+  }
+});
+
+// GET /api/opportunities/:opportunityId/match - Get match result for authenticated user
+router.get('/:opportunityId/match', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { opportunityId } = req.params;
+    const id = Array.isArray(opportunityId) ? opportunityId[0] : opportunityId;
+
+    // Resolve user's profile
+    const profile = await prisma.profile.findUnique({
+      where: { userId: req.userId! },
+    });
+
+    if (!profile) {
+      res.status(404).json({ error: { code: 'PROFILE_NOT_FOUND', message: 'Profile not found. Please create a profile first.' } });
+      return;
+    }
+
+    // Verify opportunity exists
+    const opportunity = await prisma.opportunity.findUnique({
+      where: { id },
+    });
+
+    if (!opportunity) {
+      res.status(404).json({ error: { code: 'OPPORTUNITY_NOT_FOUND', message: 'Opportunity not found' } });
+      return;
+    }
+
+    // Call matching service
+    const matchingService = new MatchingService(prisma);
+    const matchResult = await matchingService.matchCandidateToOpportunity(profile.id, id);
+
+    // Convert Map to plain object for JSON serialization
+    const response = {
+      ...matchResult,
+      evidence: Object.fromEntries(matchResult.evidence),
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('Match opportunity error:', error);
     res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
   }
 });
