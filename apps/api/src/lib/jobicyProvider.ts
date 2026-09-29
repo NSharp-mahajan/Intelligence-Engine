@@ -1,4 +1,5 @@
 import { ExternalJob, OpportunityProvider } from './opportunityProvider';
+import { extractOpportunitySkills } from '../services/opportunitySkillExtractor';
 
 export class JobicyProvider implements OpportunityProvider {
   name = 'Jobicy';
@@ -23,7 +24,7 @@ export class JobicyProvider implements OpportunityProvider {
       const externalJobs: ExternalJob[] = [];
 
       for (const job of data.jobs) {
-        // Skip if missing required fields (based on ExternalJob interface, title, company, description, applicationUrl, source are required)
+        // Skip if missing required fields
         if (!job.jobTitle || !job.companyName || !job.jobDescription || !job.url) {
           console.warn(`JobicyProvider: Skipping job ${job.id} due to missing required fields`);
           continue;
@@ -32,6 +33,8 @@ export class JobicyProvider implements OpportunityProvider {
         const employmentType = Array.isArray(job.jobType) && job.jobType.length > 0 
           ? job.jobType.join(', ') 
           : undefined;
+
+        const extraction = extractOpportunitySkills(job.jobTitle, job.jobDescription);
 
         externalJobs.push({
           id: String(job.id),
@@ -46,8 +49,8 @@ export class JobicyProvider implements OpportunityProvider {
           sourceUrl: job.url,
           source: 'Jobicy',
           postedDate: job.pubDate || undefined,
-          requiredSkills: [],
-          preferredSkills: [],
+          requiredSkills: extraction.requiredSkills,
+          preferredSkills: extraction.preferredSkills,
         });
       }
 

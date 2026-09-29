@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "ingest:jobicy": "tsx src/ingestJobicy.ts"
+    "ingest:jobicy": "tsx src/ingestJobicy.ts",
+    "backfill:skills": "tsx src/backfillOpportunitySkills.ts"
   },
   "keywords": [],
   "author": "",
