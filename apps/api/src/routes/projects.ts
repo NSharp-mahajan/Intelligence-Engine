@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middlewares/authMiddleware';
+import { findOrCreateCanonicalSkill } from '../lib/skillNormalizer';
 
 const router = Router();
 
@@ -204,19 +205,8 @@ router.post('/:projectId/skills', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const normalizedSkillName = parsed.data.skillName.toLowerCase().trim();
-
-    // Use transaction to ensure skill exists, then associate
     const projectSkill = await prisma.$transaction(async (tx) => {
-      let skill = await tx.skill.findUnique({ where: { name: normalizedSkillName } });
-      if (!skill) {
-        skill = await tx.skill.create({
-          data: {
-            name: normalizedSkillName,
-            category: parsed.data.category,
-          }
-        });
-      }
+      const skill = await findOrCreateCanonicalSkill(tx, parsed.data.skillName, parsed.data.category);
 
       // Check if association already exists
       const existing = await tx.projectSkill.findUnique({

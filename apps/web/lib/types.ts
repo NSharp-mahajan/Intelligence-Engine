@@ -107,3 +107,26 @@ export interface OpportunitiesResponse {
 export interface OpportunityResponse {
   opportunity: Opportunity;
 }
+
+export interface SkillEvidenceItem {
+  skillId: string;
+  skillName: string;
+  isDirect: boolean;
+  projectName?: string;
+  projectId?: string;
+}
+
+export interface MatchSkill {
+  skillId: string;
+  skillName: string;
+}
+
+export interface MatchResultResponse {
+  score: number | null;
+  requiredMatched: MatchSkill[];
+  requiredMissing: MatchSkill[];
+  preferredMatched: MatchSkill[];
+  preferredMissing: MatchSkill[];
+  evidence: Record<string, SkillEvidenceItem[]>;
+  hasStructuredRequirements: boolean;
+}

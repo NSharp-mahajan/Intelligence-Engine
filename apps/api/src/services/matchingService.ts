@@ -173,22 +173,24 @@ export class MatchingService {
     totalRequired: number,
     matchedPreferred: number,
     totalPreferred: number
-  ): number {
-    // If no required skills, calculate from preferred only
-    if (totalRequired === 0) {
-      if (totalPreferred === 0) {
-        return 0; // Should not happen due to earlier check, but defensive
-      }
-      return (matchedPreferred / totalPreferred) * 100;
+  ): number | null {
+    if (totalRequired === 0 && totalPreferred === 0) {
+      return null;
     }
 
-    // Calculate coverage for required (80% weight) and preferred (20% weight)
-    const requiredCoverage = matchedRequired / totalRequired;
-    const preferredCoverage = totalPreferred > 0 ? matchedPreferred / totalPreferred : 1;
+    if (totalRequired > 0 && totalPreferred === 0) {
+      return Math.round((matchedRequired / totalRequired) * 100 * 100) / 100;
+    }
+
+    if (totalRequired === 0 && totalPreferred > 0) {
+      return Math.round((matchedPreferred / totalPreferred) * 100 * 100) / 100;
+    }
 
     // Weighted score: required 80%, preferred 20%
+    const requiredCoverage = matchedRequired / totalRequired;
+    const preferredCoverage = matchedPreferred / totalPreferred;
     const score = requiredCoverage * 80 + preferredCoverage * 20;
 
-    return Math.round(score * 100) / 100; // Round to 2 decimal places
+    return Math.round(score * 100) / 100;
   }
 }

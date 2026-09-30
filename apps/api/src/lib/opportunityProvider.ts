@@ -1,5 +1,6 @@
 import { PrismaClient, RequirementType } from '@prisma/client';
 import { SKILL_VOCABULARY } from '../services/opportunitySkillExtractor';
+import { findOrCreateCanonicalSkill } from './skillNormalizer';
 
 // Define enum values locally to avoid Prisma client generation issues
 const OpportunityType = {
@@ -285,15 +286,8 @@ export class OpportunityIngestor {
             },
           });
 
-          const categoryMap = new Map(SKILL_VOCABULARY.map(def => [def.name, def.category]));
-
           for (const skillName of normalized.requiredSkills) {
-            const category = categoryMap.get(skillName) || 'TOOL';
-            const skill = await tx.skill.upsert({
-              where: { name: skillName },
-              update: {},
-              create: { name: skillName, category },
-            });
+            const skill = await findOrCreateCanonicalSkill(tx, skillName);
 
             await tx.opportunitySkill.upsert({
               where: {
@@ -314,12 +308,7 @@ export class OpportunityIngestor {
           }
 
           for (const skillName of normalized.preferredSkills) {
-            const category = categoryMap.get(skillName) || 'TOOL';
-            const skill = await tx.skill.upsert({
-              where: { name: skillName },
-              update: {},
-              create: { name: skillName, category },
-            });
+            const skill = await findOrCreateCanonicalSkill(tx, skillName);
 
             await tx.opportunitySkill.upsert({
               where: {

@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "ingest:jobicy": "tsx src/ingestJobicy.ts",
-    "backfill:skills": "tsx src/backfillOpportunitySkills.ts"
+    "backfill:skills": "tsx src/backfillOpportunitySkills.ts",
+    "reconcile:skills": "tsx src/reconcileSkills.ts"
   },
   "keywords": [],
   "author": "",

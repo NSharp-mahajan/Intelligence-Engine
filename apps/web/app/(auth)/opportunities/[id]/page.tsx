@@ -6,7 +6,7 @@ import { fetchApi } from '../../../../lib/api';
 import { Badge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Card, CardBody } from '../../../../components/ui/Card';
-import type { OpportunityResponse, Opportunity } from '../../../../lib/types';
+import type { OpportunityResponse, Opportunity, MatchResultResponse } from '../../../../lib/types';
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return '';
@@ -81,6 +81,10 @@ export default function OpportunityDetailPage({ params }: PageProps) {
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [sanitizedDescription, setSanitizedDescription] = useState('');
 
+  const [matchLoading, setMatchLoading] = useState(true);
+  const [matchError, setMatchError] = useState('');
+  const [matchResult, setMatchResult] = useState<MatchResultResponse | null>(null);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -104,7 +108,27 @@ export default function OpportunityDetailPage({ params }: PageProps) {
       }
     }
 
+    async function loadMatch() {
+      setMatchLoading(true);
+      setMatchError('');
+      try {
+        const res = await fetchApi<MatchResultResponse>(`/opportunities/${opportunityId}/match`);
+        if (!cancelled) {
+          setMatchResult(res);
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setMatchError(err instanceof Error ? err.message : 'Failed to calculate match');
+        }
+      } finally {
+        if (!cancelled) {
+          setMatchLoading(false);
+        }
+      }
+    }
+
     loadOpportunity();
+    loadMatch();
 
     return () => { cancelled = true; };
   }, [opportunityId]);
@@ -163,6 +187,148 @@ export default function OpportunityDetailPage({ params }: PageProps) {
 
       <div style={styles.layout} className="detail-layout">
         <div style={styles.mainContent}>
+          {/* Your Match Section */}
+          <div style={styles.matchSection}>
+            <h2 style={styles.sectionTitle}>Your Match</h2>
+            <Card style={styles.matchCard}>
+              <CardBody>
+                {matchLoading ? (
+                  <div style={styles.matchStateBox}>Calculating match…</div>
+                ) : matchError ? (
+                  <div style={styles.matchErrorAlert}>
+                    Unable to load match details right now.
+                  </div>
+                ) : matchResult && (!matchResult.hasStructuredRequirements || matchResult.score === null) ? (
+                  <div style={styles.matchUnavailableBox}>
+                    <div style={styles.matchHeaderRow}>
+                      <span style={styles.matchUnavailableTitle}>Match unavailable</span>
+                      <Badge variant="neutral">UNSTRUCTURED</Badge>
+                    </div>
+                    <p style={styles.matchUnavailableSubtitle}>
+                      This opportunity doesn't currently have structured skill requirements, so Career Intelligence can't calculate a reliable match yet.
+                    </p>
+                  </div>
+                ) : matchResult ? (
+                  <div style={styles.matchContainer}>
+                    {/* Score Overview Row */}
+                    <div style={styles.matchScoreRow}>
+                      <div style={styles.scoreCircleBox}>
+                        <span style={styles.scoreValue}>{matchResult.score}%</span>
+                        <span style={styles.scoreLabel}>Match Score</span>
+                      </div>
+                      <div style={styles.scoreOverview}>
+                        <h3 style={styles.matchHeadline}>
+                          {matchResult.score === 100 
+                            ? 'Perfect Skill Match' 
+                            : matchResult.score && matchResult.score >= 75 
+                            ? 'Strong Skill Alignment' 
+                            : matchResult.score && matchResult.score >= 50 
+                            ? 'Moderate Skill Match' 
+                            : 'Skill Gap Identified'}
+                        </h3>
+                        <p style={styles.matchSubheadline}>
+                          Based on your candidate profile and project evidence evaluated against role requirements.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Required Skills Block */}
+                    {(matchResult.requiredMatched.length > 0 || matchResult.requiredMissing.length > 0) && (
+                      <div style={styles.skillBlock}>
+                        <div style={styles.skillBlockHeader}>
+                          <span style={styles.skillBlockTitle}>Required Skills</span>
+                          <span style={styles.skillBlockCount}>
+                            {matchResult.requiredMatched.length} of {matchResult.requiredMatched.length + matchResult.requiredMissing.length} matched
+                          </span>
+                        </div>
+                        <div style={styles.skillBadgeGrid}>
+                          {matchResult.requiredMatched.map(skill => {
+                            const evList = matchResult.evidence[skill.skillId] || [];
+                            const isDirect = evList.some(e => e.isDirect);
+                            const projectEv = evList.find(e => !e.isDirect && e.projectName);
+                            
+                            let evLabel = 'Direct profile skill';
+                            if (projectEv) {
+                              evLabel = `Project: ${projectEv.projectName}`;
+                            } else if (!isDirect && evList.length > 0) {
+                              evLabel = 'Skill evidence found';
+                            }
+
+                            return (
+                              <div key={skill.skillId} style={styles.skillCardMatched}>
+                                <div style={styles.skillCardTop}>
+                                  <span style={styles.skillNameMatched}>{skill.skillName}</span>
+                                  <Badge variant="success">Matched</Badge>
+                                </div>
+                                <span style={styles.skillEvidenceLabel}>✓ {evLabel}</span>
+                              </div>
+                            );
+                          })}
+
+                          {matchResult.requiredMissing.map(skill => (
+                            <div key={skill.skillId} style={styles.skillCardMissing}>
+                              <div style={styles.skillCardTop}>
+                                <span style={styles.skillNameMissing}>{skill.skillName}</span>
+                                <Badge variant="error">Missing</Badge>
+                              </div>
+                              <span style={styles.skillMissingLabel}>Not found on profile</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Preferred Skills Block */}
+                    {(matchResult.preferredMatched.length > 0 || matchResult.preferredMissing.length > 0) && (
+                      <div style={styles.skillBlock}>
+                        <div style={styles.skillBlockHeader}>
+                          <span style={styles.skillBlockTitle}>Preferred Skills</span>
+                          <span style={styles.skillBlockCount}>
+                            {matchResult.preferredMatched.length} of {matchResult.preferredMatched.length + matchResult.preferredMissing.length} matched
+                          </span>
+                        </div>
+                        <div style={styles.skillBadgeGrid}>
+                          {matchResult.preferredMatched.map(skill => {
+                            const evList = matchResult.evidence[skill.skillId] || [];
+                            const isDirect = evList.some(e => e.isDirect);
+                            const projectEv = evList.find(e => !e.isDirect && e.projectName);
+                            
+                            let evLabel = 'Direct profile skill';
+                            if (projectEv) {
+                              evLabel = `Project: ${projectEv.projectName}`;
+                            } else if (!isDirect && evList.length > 0) {
+                              evLabel = 'Skill evidence found';
+                            }
+
+                            return (
+                              <div key={skill.skillId} style={styles.skillCardMatched}>
+                                <div style={styles.skillCardTop}>
+                                  <span style={styles.skillNameMatched}>{skill.skillName}</span>
+                                  <Badge variant="success">Matched</Badge>
+                                </div>
+                                <span style={styles.skillEvidenceLabel}>✓ {evLabel}</span>
+                              </div>
+                            );
+                          })}
+
+                          {matchResult.preferredMissing.map(skill => (
+                            <div key={skill.skillId} style={styles.skillCardMissing}>
+                              <div style={styles.skillCardTop}>
+                                <span style={styles.skillNameMissing}>{skill.skillName}</span>
+                                <Badge variant="neutral">Optional</Badge>
+                              </div>
+                              <span style={styles.skillMissingLabel}>Not found on profile</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </CardBody>
+            </Card>
+          </div>
+
           <h2 style={styles.sectionTitle}>About this opportunity</h2>
           <Card>
             <CardBody>
@@ -423,5 +589,173 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.9375rem',
     border: '1px solid var(--error-border)',
     fontWeight: 500,
+  },
+  matchSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    marginBottom: '8px',
+  },
+  matchCard: {
+    border: '1px solid var(--border-light)',
+  },
+  matchStateBox: {
+    padding: '24px 16px',
+    textAlign: 'center',
+    color: 'var(--text-secondary)',
+    fontSize: '0.9375rem',
+  },
+  matchErrorAlert: {
+    padding: '16px',
+    color: 'var(--text-secondary)',
+    fontSize: '0.875rem',
+    backgroundColor: 'var(--bg-surface-hover)',
+    borderRadius: 'var(--radius-md)',
+  },
+  matchUnavailableBox: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  matchHeaderRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  matchUnavailableTitle: {
+    fontSize: '1.125rem',
+    fontWeight: 600,
+    color: 'var(--text-primary)',
+  },
+  matchUnavailableSubtitle: {
+    fontSize: '0.9375rem',
+    color: 'var(--text-secondary)',
+    lineHeight: 1.5,
+    margin: 0,
+  },
+  matchContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+  },
+  matchScoreRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '20px',
+    paddingBottom: '16px',
+    borderBottom: '1px solid var(--border-light)',
+  },
+  scoreCircleBox: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '84px',
+    height: '84px',
+    borderRadius: 'var(--radius-lg)',
+    backgroundColor: 'rgba(234, 88, 12, 0.08)',
+    border: '1.5px solid var(--accent-primary)',
+    flexShrink: 0,
+  },
+  scoreValue: {
+    fontSize: '1.625rem',
+    fontWeight: 800,
+    color: 'var(--accent-primary)',
+    lineHeight: 1,
+  },
+  scoreLabel: {
+    fontSize: '0.6875rem',
+    fontWeight: 700,
+    color: 'var(--text-secondary)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    marginTop: '4px',
+  },
+  scoreOverview: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  matchHeadline: {
+    fontSize: '1.125rem',
+    fontWeight: 700,
+    color: 'var(--text-primary)',
+    margin: 0,
+  },
+  matchSubheadline: {
+    fontSize: '0.875rem',
+    color: 'var(--text-secondary)',
+    margin: 0,
+    lineHeight: 1.4,
+  },
+  skillBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  skillBlockHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  skillBlockTitle: {
+    fontSize: '0.9375rem',
+    fontWeight: 700,
+    color: 'var(--text-primary)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+  },
+  skillBlockCount: {
+    fontSize: '0.8125rem',
+    color: 'var(--text-secondary)',
+  },
+  skillBadgeGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+    gap: '12px',
+  },
+  skillCardMatched: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    padding: '12px 14px',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--bg-surface-hover)',
+    border: '1px solid var(--border-light)',
+  },
+  skillCardMissing: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    padding: '12px 14px',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    border: '1px dashed var(--border-light)',
+    opacity: 0.85,
+  },
+  skillCardTop: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+  },
+  skillNameMatched: {
+    fontSize: '0.9375rem',
+    fontWeight: 600,
+    color: 'var(--text-primary)',
+  },
+  skillNameMissing: {
+    fontSize: '0.9375rem',
+    fontWeight: 600,
+    color: 'var(--text-secondary)',
+  },
+  skillEvidenceLabel: {
+    fontSize: '0.75rem',
+    color: 'var(--success-text)',
+    fontWeight: 500,
+  },
+  skillMissingLabel: {
+    fontSize: '0.75rem',
+    color: 'var(--text-tertiary)',
   },
 };

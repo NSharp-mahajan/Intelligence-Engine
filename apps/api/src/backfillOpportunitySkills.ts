@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { prisma } from './lib/prisma';
 import { extractOpportunitySkills, SKILL_VOCABULARY } from './services/opportunitySkillExtractor';
+import { findOrCreateCanonicalSkill } from './lib/skillNormalizer';
 import { RequirementType } from '@prisma/client';
 
 async function main() {
@@ -51,15 +52,8 @@ async function main() {
       for (const item of extraction.skills) {
         const category = categoryMap.get(item.name) || 'TOOL';
 
-        // Find or create Skill record
-        const skill = await prisma.skill.upsert({
-          where: { name: item.name },
-          update: {},
-          create: {
-            name: item.name,
-            category,
-          },
-        });
+        // Find or create Skill record using canonical normalizer
+        const skill = await findOrCreateCanonicalSkill(prisma, item.name, category);
 
         // Find or upsert OpportunitySkill record
         await prisma.opportunitySkill.upsert({
