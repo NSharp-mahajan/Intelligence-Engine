@@ -148,18 +148,24 @@ export class DashboardService {
 
       const matchedCount = matchResult.requiredMatched.length + matchResult.preferredMatched.length;
       const missingCount = matchResult.requiredMissing.length + matchResult.preferredMissing.length;
+      const totalRequirements = matchedCount + missingCount;
 
       if (matchResult.score > 0) {
         matchedOpportunitiesCount++;
-        scoredList.push({
-          opp,
-          match: {
-            score: matchResult.score,
-            matchedCount,
-            missingCount,
-            hasStructuredRequirements: true,
-          },
-        });
+
+        // Step 6.1: Recommendation Eligibility Rule
+        // Only opportunities with AT LEAST 3 structured requirements total qualify for Dashboard Recommendations
+        if (totalRequirements >= 3) {
+          scoredList.push({
+            opp,
+            match: {
+              score: matchResult.score,
+              matchedCount,
+              missingCount,
+              hasStructuredRequirements: true,
+            },
+          });
+        }
       }
 
       // Track missing skills across structured opportunities

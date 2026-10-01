@@ -168,7 +168,7 @@ async function main() {
 
     // Test 13: Ingestion (with cleanup)
     console.log('Test 13: Opportunity Ingestion');
-    await prisma.opportunity.deleteMany({ where: { source: 'test' } });
+    await prisma.opportunity.deleteMany({ where: { source: { in: ['test', 'mock'] } } });
     
     const ingestor = new OpportunityIngestor(prisma);
     const provider = new MockProvider();
@@ -224,8 +224,7 @@ async function main() {
 
     // Cleanup
     console.log('Cleaning up test data...');
-    await prisma.opportunity.deleteMany({ where: { source: 'test' } });
-    await prisma.skill.deleteMany({ where: { name: { in: ['react', 'typescript', 'node', 'python', 'sql', 'graphql', 'aws', 'docker', 'pandas', 'numpy'] } } });
+    await prisma.opportunity.deleteMany({ where: { source: { in: ['test', 'mock'] } } });
     console.log('Cleanup complete.');
 
   } catch (error) {
