@@ -28,6 +28,9 @@ function fmtEnum(value: string): string {
 function OpportunityCard({ opp }: { opp: Opportunity }) {
   const postedLabel = formatDate(opp.postedDate);
 
+  const hasMatch = opp.match !== undefined && opp.match !== null;
+  const isStructured = hasMatch && opp.match?.hasStructuredRequirements === true && opp.match?.score !== null;
+
   return (
     <article style={card.root} className="opp-card">
       <div style={card.topRow}>
@@ -51,7 +54,7 @@ function OpportunityCard({ opp }: { opp: Opportunity }) {
         )}
       </div>
 
-      {(opp.workMode !== 'UNKNOWN' || opp.employmentType !== 'UNKNOWN' || opp.experienceLevel !== 'UNKNOWN') && (
+      {(opp.workMode !== 'UNKNOWN' || opp.employmentType !== 'UNKNOWN' || opp.experienceLevel !== 'UNKNOWN' || hasMatch) && (
         <div style={card.badgeRow}>
           {opp.workMode !== 'UNKNOWN' && (
             <Badge variant="neutral">{fmtEnum(opp.workMode)}</Badge>
@@ -61,6 +64,20 @@ function OpportunityCard({ opp }: { opp: Opportunity }) {
           )}
           {opp.experienceLevel !== 'UNKNOWN' && (
             <Badge variant="neutral">{fmtEnum(opp.experienceLevel)}</Badge>
+          )}
+
+          {hasMatch && (
+            isStructured ? (
+              <div style={card.matchPill}>
+                <span style={card.matchScore}>{opp.match!.score}% Match</span>
+                <span style={card.matchDot}>•</span>
+                <span style={card.matchStats}>
+                  {opp.match!.matchedCount} matched {opp.match!.missingCount > 0 ? `· ${opp.match!.missingCount} missing` : ''}
+                </span>
+              </div>
+            ) : (
+              <span style={card.matchUnavailable}>Match unavailable</span>
+            )
           )}
         </div>
       )}
@@ -131,9 +148,46 @@ const card: Record<string, React.CSSProperties> = {
   },
   badgeRow: {
     display: 'flex',
+    alignItems: 'center',
     gap: '6px',
     flexWrap: 'wrap',
     paddingTop: '2px',
+  },
+  matchPill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '5px',
+    padding: '2px 9px',
+    borderRadius: 'var(--radius-full)',
+    backgroundColor: 'rgba(234, 88, 12, 0.07)',
+    border: '1px solid rgba(234, 88, 12, 0.22)',
+    fontSize: '0.75rem',
+    fontWeight: 500,
+    marginLeft: 'auto',
+  },
+  matchScore: {
+    fontWeight: 700,
+    color: 'var(--accent-primary)',
+  },
+  matchDot: {
+    color: 'var(--text-tertiary)',
+    fontSize: '0.625rem',
+  },
+  matchStats: {
+    color: 'var(--text-secondary)',
+    fontWeight: 500,
+  },
+  matchUnavailable: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '2px 9px',
+    borderRadius: 'var(--radius-full)',
+    backgroundColor: 'var(--bg-surface-hover)',
+    border: '1px solid var(--border-light)',
+    fontSize: '0.75rem',
+    color: 'var(--text-tertiary)',
+    fontWeight: 500,
+    marginLeft: 'auto',
   },
   footerRow: {
     display: 'flex',
@@ -229,6 +283,19 @@ const FILTER_OPTIONS = {
   experienceLevel: ['ENTRY', 'JUNIOR', 'MID', 'SENIOR', 'UNKNOWN'],
 };
 
+const MATCH_FILTER_OPTIONS = [
+  { label: '80%+ Match', value: '80_plus' },
+  { label: '60%+ Match', value: '60_plus' },
+  { label: '40%+ Match', value: '40_plus' },
+  { label: 'Below 40%', value: 'below_40' },
+  { label: 'Match Unavailable', value: 'unavailable' },
+];
+
+const SORT_OPTIONS = [
+  { label: 'Match: High to Low', value: 'match_desc' },
+  { label: 'Match: Low to High', value: 'match_asc' },
+];
+
 // ─── Main content ─────────────────────────────────────────────────────────────
 
 function OpportunitiesContent() {
@@ -244,6 +311,8 @@ function OpportunitiesContent() {
   const workMode = searchParams.get('workMode') || '';
   const employmentType = searchParams.get('employmentType') || '';
   const experienceLevel = searchParams.get('experienceLevel') || '';
+  const matchFilter = searchParams.get('matchFilter') || '';
+  const sort = searchParams.get('sort') || '';
 
   // Local state for the search input so it can be typed into without triggering a fetch on every keystroke
   const [searchInput, setSearchInput] = useState(search);
@@ -256,6 +325,11 @@ function OpportunitiesContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [data, setData] = useState<OpportunitiesResponse | null>(null);
+
+  // Determine if candidate has personalized match data available
+  const hasMatchData = Boolean(
+    data?.opportunities && data.opportunities.length > 0 && data.opportunities.some((opp: Opportunity) => opp.match !== null)
+  );
 
   // Update URL helper
   const updateQuery = useCallback((updates: Record<string, string | null>) => {
@@ -298,11 +372,15 @@ function OpportunitiesContent() {
       workMode: null,
       employmentType: null,
       experienceLevel: null,
+      matchFilter: null,
+      sort: null,
       page: '1',
     });
   };
 
-  const hasActiveFilters = Boolean(search || type || workMode || employmentType || experienceLevel);
+  const hasActiveFilters = Boolean(
+    search || type || workMode || employmentType || experienceLevel || matchFilter || sort
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -319,6 +397,8 @@ function OpportunitiesContent() {
         if (workMode) params.set('workMode', workMode);
         if (employmentType) params.set('employmentType', employmentType);
         if (experienceLevel) params.set('experienceLevel', experienceLevel);
+        if (matchFilter) params.set('matchFilter', matchFilter);
+        if (sort) params.set('sort', sort);
 
         const result = await fetchApi<OpportunitiesResponse>(`/opportunities?${params.toString()}`);
         if (!cancelled) {
@@ -338,7 +418,7 @@ function OpportunitiesContent() {
     loadOpportunities();
 
     return () => { cancelled = true; };
-  }, [page, search, type, workMode, employmentType, experienceLevel]);
+  }, [page, search, type, workMode, employmentType, experienceLevel, matchFilter, sort]);
 
   const handleNext = () => {
     if (data && page < data.pagination.totalPages) {
@@ -351,6 +431,8 @@ function OpportunitiesContent() {
       updateQuery({ page: (page - 1).toString() });
     }
   };
+
+  const isMatchControlDisabled = data !== null && !hasMatchData && !matchFilter && !sort;
 
   return (
     <div style={pageStyles.wrap} className="animate-fade-in">
@@ -410,6 +492,38 @@ function OpportunitiesContent() {
           >
             <option value="">All Experience</option>
             {FILTER_OPTIONS.experienceLevel.map(opt => <option key={opt} value={opt}>{fmtEnum(opt)}</option>)}
+          </select>
+
+          <select
+            value={matchFilter}
+            onChange={(e) => handleFilterChange('matchFilter', e.target.value)}
+            disabled={isMatchControlDisabled}
+            style={{
+              ...pageStyles.select,
+              ...(isMatchControlDisabled ? pageStyles.selectDisabled : {}),
+            }}
+            title={data !== null && !hasMatchData ? 'Match filter requires candidate profile' : undefined}
+          >
+            <option value="">All Matches</option>
+            {MATCH_FILTER_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+
+          <select
+            value={sort}
+            onChange={(e) => handleFilterChange('sort', e.target.value)}
+            disabled={isMatchControlDisabled}
+            style={{
+              ...pageStyles.select,
+              ...(isMatchControlDisabled ? pageStyles.selectDisabled : {}),
+            }}
+            title={data !== null && !hasMatchData ? 'Match sorting requires candidate profile' : undefined}
+          >
+            <option value="">Newest First</option>
+            {SORT_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
           </select>
         </div>
 
@@ -548,6 +662,10 @@ const pageStyles: Record<string, React.CSSProperties> = {
     color: 'var(--text-primary)',
     outline: 'none',
     cursor: 'pointer',
+  },
+  selectDisabled: {
+    opacity: 0.5,
+    cursor: 'not-allowed',
   },
   toolbarFooter: {
     display: 'flex',

@@ -73,6 +73,13 @@ export interface OpportunitySkill {
   skill: Skill;
 }
 
+export interface OpportunityMatchSummary {
+  score: number | null;
+  hasStructuredRequirements: boolean;
+  matchedCount: number;
+  missingCount: number;
+}
+
 export interface Opportunity {
   id: string;
   title: string;
@@ -92,6 +99,7 @@ export interface Opportunity {
   createdAt: string;
   updatedAt: string;
   opportunitySkills: OpportunitySkill[];
+  match?: OpportunityMatchSummary | null;
 }
 
 export interface OpportunitiesResponse {
@@ -130,3 +138,38 @@ export interface MatchResultResponse {
   evidence: Record<string, SkillEvidenceItem[]>;
   hasStructuredRequirements: boolean;
 }
+
+export interface DashboardRecommendation {
+  id: string;
+  title: string;
+  organization: string;
+  location: string | null;
+  workMode: string;
+  match: {
+    score: number;
+    matchedCount: number;
+    missingCount: number;
+    hasStructuredRequirements: boolean;
+  };
+}
+
+export interface SkillGap {
+  skillId: string;
+  skillName: string;
+  opportunityCount: number;
+}
+
+export interface DashboardResponse {
+  hasProfile: boolean;
+  profileComplete: boolean;
+  hasSkillsOrEvidence: boolean;
+  hasStructuredOpportunities: boolean;
+  metrics: {
+    skillsCount: number;
+    projectsCount: number;
+    matchedOpportunitiesCount: number;
+  };
+  recommendations: DashboardRecommendation[];
+  skillGaps: SkillGap[];
+}
+

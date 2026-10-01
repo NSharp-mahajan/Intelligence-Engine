@@ -9,6 +9,7 @@ import profileRoutes from './routes/profile';
 
 import skillsRoutes from './routes/skills';
 import opportunitiesRoutes from './routes/opportunities';
+import dashboardRoutes from './routes/dashboard';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -33,6 +34,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/skills', skillsRoutes);
 app.use('/api/opportunities', opportunitiesRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

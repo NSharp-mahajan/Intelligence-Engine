@@ -1,8 +1,9 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import { getAuth } from '@clerk/express';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middlewares/authMiddleware';
-import { MatchingService } from '../services/matchingService';
+import { MatchingService, SkillEvidence, MatchSummary } from '../services/matchingService';
 
 const router = Router();
 
@@ -17,6 +18,8 @@ const listQuerySchema = z.object({
   experienceLevel: z.enum(['ENTRY', 'JUNIOR', 'MID', 'SENIOR', 'UNKNOWN']).optional(),
   source: z.string().optional(),
   skill: z.string().optional(),
+  matchFilter: z.enum(['80_plus', '60_plus', '40_plus', 'below_40', 'unavailable']).optional(),
+  sort: z.enum(['match_desc', 'match_asc', 'posted_desc']).optional(),
   page: z.string().optional().transform(val => (val ? Number(val) : 1)).pipe(z.number().int().positive()),
   limit: z.string().optional().transform(val => (val ? Number(val) : 20)).pipe(z.number().int().positive().max(100)),
 });
@@ -35,7 +38,21 @@ router.get('/', async (req: any, res: Response) => {
       return;
     }
 
-    const { search, title, location, type, workMode, employmentType, experienceLevel, source, skill, page = 1, limit = 20 } = parsed.data;
+    const {
+      search,
+      title,
+      location,
+      type,
+      workMode,
+      employmentType,
+      experienceLevel,
+      source,
+      skill,
+      matchFilter,
+      sort,
+      page = 1,
+      limit = 20,
+    } = parsed.data;
 
     const where: any = {};
 
@@ -82,34 +99,158 @@ router.get('/', async (req: any, res: Response) => {
       };
     }
 
-    const [opportunities, total] = await Promise.all([
-      prisma.opportunity.findMany({
+    // Optional match summary resolution for authenticated user with profile
+    let evidenceMap: Map<string, SkillEvidence[]> | null = null;
+    const matchingService = new MatchingService(prisma);
+
+    try {
+      const auth = getAuth(req);
+      if (auth && auth.userId) {
+        const user = await prisma.user.findUnique({ where: { clerkId: auth.userId } });
+        if (user) {
+          evidenceMap = await matchingService.buildCandidateEvidenceMapByUserId(user.id);
+        }
+      }
+    } catch {
+      evidenceMap = null;
+    }
+
+    const isMatchFilteredOrSorted = Boolean(matchFilter || (sort && sort !== 'posted_desc'));
+
+    let finalOpportunities: any[] = [];
+    let totalCount = 0;
+
+    if (isMatchFilteredOrSorted) {
+      const allMatchingOpps = await prisma.opportunity.findMany({
         where,
         include: {
           opportunitySkills: {
             include: {
-              skill: true
-            }
-          }
+              skill: true,
+            },
+          },
         },
         orderBy: [
           { postedDate: 'desc' },
           { createdAt: 'desc' },
-          { id: 'asc' }
+          { id: 'asc' },
         ],
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.opportunity.count({ where }),
-    ]);
+      });
+
+      let oppsWithMatch = allMatchingOpps.map(opp => {
+        let matchSummary: MatchSummary | null = null;
+        if (evidenceMap) {
+          const matchResult = matchingService.matchEvidenceToOpportunity(evidenceMap, opp);
+          matchSummary = matchingService.getMatchSummary(matchResult);
+        }
+        return {
+          ...opp,
+          match: matchSummary,
+        };
+      });
+
+      // Apply matchFilter
+      if (matchFilter) {
+        oppsWithMatch = oppsWithMatch.filter(opp => {
+          const score = opp.match?.score;
+          const isStructured = opp.match?.hasStructuredRequirements === true && typeof score === 'number';
+
+          if (matchFilter === 'unavailable') {
+            return !isStructured;
+          }
+
+          if (!isStructured || typeof score !== 'number') {
+            return false;
+          }
+
+          switch (matchFilter) {
+            case '80_plus':
+              return score >= 80;
+            case '60_plus':
+              return score >= 60;
+            case '40_plus':
+              return score >= 40;
+            case 'below_40':
+              return score < 40;
+            default:
+              return true;
+          }
+        });
+      }
+
+      // Apply sort
+      if (sort === 'match_desc' || sort === 'match_asc') {
+        oppsWithMatch.sort((a, b) => {
+          const scoreA = a.match?.score;
+          const scoreB = b.match?.score;
+
+          const hasA = a.match?.hasStructuredRequirements === true && scoreA !== null;
+          const hasB = b.match?.hasStructuredRequirements === true && scoreB !== null;
+
+          if (hasA && hasB) {
+            if (scoreA !== scoreB) {
+              return sort === 'match_desc' ? scoreB! - scoreA! : scoreA! - scoreB!;
+            }
+          } else if (hasA && !hasB) {
+            return -1;
+          } else if (!hasA && hasB) {
+            return 1;
+          }
+
+          const dateA = a.postedDate ? new Date(a.postedDate).getTime() : 0;
+          const dateB = b.postedDate ? new Date(b.postedDate).getTime() : 0;
+          if (dateA !== dateB) return dateB - dateA;
+
+          return a.id.localeCompare(b.id);
+        });
+      }
+
+      totalCount = oppsWithMatch.length;
+      finalOpportunities = oppsWithMatch.slice((page - 1) * limit, page * limit);
+    } else {
+      const [opportunities, total] = await Promise.all([
+        prisma.opportunity.findMany({
+          where,
+          include: {
+            opportunitySkills: {
+              include: {
+                skill: true,
+              },
+            },
+          },
+          orderBy: [
+            { postedDate: 'desc' },
+            { createdAt: 'desc' },
+            { id: 'asc' },
+          ],
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        prisma.opportunity.count({ where }),
+      ]);
+
+      totalCount = total;
+
+      finalOpportunities = opportunities.map(opp => {
+        let matchSummary: MatchSummary | null = null;
+        if (evidenceMap) {
+          const matchResult = matchingService.matchEvidenceToOpportunity(evidenceMap, opp);
+          matchSummary = matchingService.getMatchSummary(matchResult);
+        }
+        return {
+          ...opp,
+          match: matchSummary,
+        };
+      });
+    }
 
     res.json({
-      opportunities,
+      opportunities: finalOpportunities,
       pagination: {
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit),
       },
     });
   } catch (error) {
