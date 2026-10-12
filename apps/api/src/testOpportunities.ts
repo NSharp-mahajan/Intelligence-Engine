@@ -53,10 +53,10 @@ async function main() {
     const normalizer = new OpportunityNormalizer();
     
     const testSkills = ['React.js', 'ReactJS', 'react', 'Vue.js', 'Node.js', 'nodejs'];
-    const normalized = testSkills.map(s => normalizer.normalizeSkill(s));
+    const normalizedSkills = testSkills.map(s => normalizer.normalizeSkill(s));
     console.log('  Input:', testSkills);
-    console.log('  Output:', normalized);
-    console.log('  Result:', normalized.every(s => s === s.toLowerCase()) ? 'PASS' : 'FAIL');
+    console.log('  Output:', normalizedSkills);
+    console.log('  Result:', normalizedSkills.every(s => s === s.toLowerCase()) ? 'PASS' : 'FAIL');
     console.log();
 
     // Test 2: Work Mode Normalization
@@ -115,18 +115,18 @@ async function main() {
       preferredSkills: ['AWS', 'Docker'],
     };
     
-    const normalizedJob = normalizer.normalize(externalJob);
-    console.log('  Title trimmed:', normalizedJob.title === externalJob.title.trim() ? 'PASS' : 'FAIL');
-    console.log('  Skills normalized:', normalizedJob.requiredSkills.every(s => s === s.toLowerCase()) ? 'PASS' : 'FAIL');
-    console.log('  Work mode:', normalizedJob.workMode === 'REMOTE' ? 'PASS' : 'FAIL');
-    console.log('  Employment type:', normalizedJob.employmentType === 'FULL_TIME' ? 'PASS' : 'FAIL');
-    console.log('  Experience level:', normalizedJob.experienceLevel === 'SENIOR' ? 'PASS' : 'FAIL');
+    const normalized = normalizer.normalize(externalJob);
+    console.log('  Title trimmed:', normalized.title === externalJob.title.trim() ? 'PASS' : 'FAIL');
+    console.log('  Skills normalized:', normalized.requiredSkills.every(s => s === s.toLowerCase()) ? 'PASS' : 'FAIL');
+    console.log('  Work mode:', normalized.workMode === 'REMOTE' ? 'PASS' : 'FAIL');
+    console.log('  Employment type:', normalized.employmentType === 'FULL_TIME' ? 'PASS' : 'FAIL');
+    console.log('  Experience level:', normalized.experienceLevel === 'SENIOR' ? 'PASS' : 'FAIL');
     console.log();
 
     // Test 7: Deduplication Key Generation
     console.log('Test 7: Deduplication Key Generation');
     const deduplicator = new OpportunityDeduplicator();
-    const key = deduplicator.generateDeduplicationKey(normalizedJob);
+    const key = deduplicator.generateDeduplicationKey(normalized);
     console.log('  Generated key:', key);
     console.log('  Result:', key.includes('test') && key.includes('test-123') ? 'PASS' : 'FAIL');
     console.log();
@@ -168,7 +168,7 @@ async function main() {
 
     // Test 13: Ingestion (with cleanup)
     console.log('Test 13: Opportunity Ingestion');
-    await prisma.opportunity.deleteMany({ where: { source: { in: ['test', 'mock'] } } });
+    await prisma.opportunity.deleteMany({ where: { source: 'test' } });
     
     const ingestor = new OpportunityIngestor(prisma);
     const provider = new MockProvider();
@@ -224,7 +224,8 @@ async function main() {
 
     // Cleanup
     console.log('Cleaning up test data...');
-    await prisma.opportunity.deleteMany({ where: { source: { in: ['test', 'mock'] } } });
+    await prisma.opportunity.deleteMany({ where: { source: 'test' } });
+    await prisma.skill.deleteMany({ where: { name: { in: ['react', 'typescript', 'node', 'python', 'sql', 'graphql', 'aws', 'docker', 'pandas', 'numpy'] } } });
     console.log('Cleanup complete.');
 
   } catch (error) {

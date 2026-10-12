@@ -1,6 +1,4 @@
 import { PrismaClient, RequirementType } from '@prisma/client';
-import { SKILL_VOCABULARY } from '../services/opportunitySkillExtractor';
-import { findOrCreateCanonicalSkill } from './skillNormalizer';
 
 // Define enum values locally to avoid Prisma client generation issues
 const OpportunityType = {
@@ -81,6 +79,10 @@ export interface OpportunityProvider {
   name: string;
   fetch(): Promise<ExternalJob[]>;
 }
+
+export * from './jobicyProvider';
+export * from './greenhouseProvider';
+export * from './leverProvider';
 
 export class OpportunityNormalizer {
   private skillNormalizationMap: Map<string, string> = new Map([
@@ -287,19 +289,14 @@ export class OpportunityIngestor {
           });
 
           for (const skillName of normalized.requiredSkills) {
-            const skill = await findOrCreateCanonicalSkill(tx, skillName);
+            const skill = await tx.skill.upsert({
+              where: { name: skillName },
+              update: {},
+              create: { name: skillName, category: 'TOOL' },
+            });
 
-            await tx.opportunitySkill.upsert({
-              where: {
-                opportunityId_skillId: {
-                  opportunityId: opportunity.id,
-                  skillId: skill.id,
-                },
-              },
-              update: {
-                requirementType: RequirementType.REQUIRED,
-              },
-              create: {
+            await tx.opportunitySkill.create({
+              data: {
                 opportunityId: opportunity.id,
                 skillId: skill.id,
                 requirementType: RequirementType.REQUIRED,
@@ -308,19 +305,14 @@ export class OpportunityIngestor {
           }
 
           for (const skillName of normalized.preferredSkills) {
-            const skill = await findOrCreateCanonicalSkill(tx, skillName);
+            const skill = await tx.skill.upsert({
+              where: { name: skillName },
+              update: {},
+              create: { name: skillName, category: 'TOOL' },
+            });
 
-            await tx.opportunitySkill.upsert({
-              where: {
-                opportunityId_skillId: {
-                  opportunityId: opportunity.id,
-                  skillId: skill.id,
-                },
-              },
-              update: {
-                requirementType: RequirementType.PREFERRED,
-              },
-              create: {
+            await tx.opportunitySkill.create({
+              data: {
                 opportunityId: opportunity.id,
                 skillId: skill.id,
                 requirementType: RequirementType.PREFERRED,

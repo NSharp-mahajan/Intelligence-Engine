@@ -1,63 +1,117 @@
-import { ExternalJob, OpportunityProvider } from './opportunityProvider';
-import { extractOpportunitySkills } from '../services/opportunitySkillExtractor';
+import type { ExternalJob, OpportunityProvider } from './opportunityProvider';
+
+export interface JobicyFetchOptions {
+  count?: number;
+  geo?: string;
+  industry?: string;
+  tag?: string;
+}
+
+export interface JobicyJobItem {
+  id: number | string;
+  url: string;
+  jobTitle: string;
+  companyName: string;
+  companyLogo?: string;
+  jobIndustry?: string[] | string;
+  jobType?: string[] | string;
+  jobGeo?: string;
+  jobLevel?: string;
+  jobExcerpt?: string;
+  jobDescription?: string;
+  pubDate?: string;
+  salaryMin?: number;
+  salaryMax?: number;
+  salaryCurrency?: string;
+  salaryPeriod?: string;
+}
+
+export interface JobicyApiResponse {
+  apiVersion?: string;
+  documentation?: string;
+  jobCount?: number;
+  jobs?: JobicyJobItem[];
+  statusCode?: number;
+  success?: boolean;
+}
 
 export class JobicyProvider implements OpportunityProvider {
-  name = 'Jobicy';
-  
-  constructor(private readonly count: number = 50) {}
+  readonly name = 'Jobicy';
+  private readonly baseUrl: string;
+  private readonly defaultOptions: JobicyFetchOptions;
 
-  async fetch(): Promise<ExternalJob[]> {
-    try {
-      const url = `https://jobicy.com/api/v2/remote-jobs?count=${this.count}`;
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error(`Jobicy API responded with status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      if (!data || !data.success || !Array.isArray(data.jobs)) {
-        throw new Error('Malformed Jobicy response: missing or invalid jobs array');
-      }
-
-      const externalJobs: ExternalJob[] = [];
-
-      for (const job of data.jobs) {
-        // Skip if missing required fields
-        if (!job.jobTitle || !job.companyName || !job.jobDescription || !job.url) {
-          console.warn(`JobicyProvider: Skipping job ${job.id} due to missing required fields`);
-          continue;
-        }
-
-        const employmentType = Array.isArray(job.jobType) && job.jobType.length > 0 
-          ? job.jobType.join(', ') 
-          : undefined;
-
-        const extraction = extractOpportunitySkills(job.jobTitle, job.jobDescription);
-
-        externalJobs.push({
-          id: String(job.id),
-          title: job.jobTitle,
-          company: job.companyName,
-          description: job.jobDescription,
-          location: job.jobGeo || undefined,
-          workMode: 'Remote', // Jobicy is specifically for remote jobs
-          employmentType: employmentType,
-          experienceLevel: job.jobLevel || undefined,
-          applicationUrl: job.url, // Respecting Jobicy's public feed URL rule
-          sourceUrl: job.url,
-          source: 'Jobicy',
-          postedDate: job.pubDate || undefined,
-          requiredSkills: extraction.requiredSkills,
-          preferredSkills: extraction.preferredSkills,
-        });
-      }
-
-      return externalJobs;
-    } catch (error) {
-      console.error('JobicyProvider: Error fetching jobs:', error instanceof Error ? error.message : error);
-      throw error;
+  constructor(
+    config?: number | JobicyFetchOptions | string,
+    baseUrl = 'https://jobicy.com/api/v2/remote-jobs',
+  ) {
+    if (typeof config === 'number') {
+      this.defaultOptions = { count: config };
+      this.baseUrl = baseUrl;
+    } else if (typeof config === 'string') {
+      this.baseUrl = config;
+      this.defaultOptions = { count: 50 };
+    } else if (typeof config === 'object' && config !== null) {
+      this.defaultOptions = config;
+      this.baseUrl = baseUrl;
+    } else {
+      this.baseUrl = baseUrl;
+      this.defaultOptions = { count: 50 };
     }
+  }
+
+  async fetch(options?: JobicyFetchOptions): Promise<ExternalJob[]> {
+    const effectiveOptions = { ...this.defaultOptions, ...options };
+    const url = new URL(this.baseUrl);
+    if (effectiveOptions.count !== undefined) url.searchParams.set('count', effectiveOptions.count.toString());
+    if (effectiveOptions.geo) url.searchParams.set('geo', effectiveOptions.geo);
+    if (effectiveOptions.industry) url.searchParams.set('industry', effectiveOptions.industry);
+    if (effectiveOptions.tag) url.searchParams.set('tag', effectiveOptions.tag);
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Career-Intelligence-Engine/1.0',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Jobicy API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as JobicyApiResponse;
+    if (!data.jobs || !Array.isArray(data.jobs)) {
+      return [];
+    }
+
+    return data.jobs.map((job) => this.transformJobicyJob(job));
+  }
+
+  transformJobicyJob(job: JobicyJobItem): ExternalJob {
+    const employmentTypeStr = Array.isArray(job.jobType)
+      ? job.jobType.join(', ')
+      : job.jobType || '';
+
+    const requiredSkills: string[] = [];
+    if (Array.isArray(job.jobIndustry)) {
+      requiredSkills.push(...job.jobIndustry);
+    } else if (typeof job.jobIndustry === 'string' && job.jobIndustry) {
+      requiredSkills.push(job.jobIndustry);
+    }
+
+    return {
+      id: job.id !== undefined && job.id !== null ? String(job.id) : undefined,
+      title: job.jobTitle || 'Untitled Opportunity',
+      company: job.companyName || 'Unknown Organization',
+      description: job.jobDescription || job.jobExcerpt || '',
+      location: job.jobGeo || undefined,
+      workMode: 'REMOTE',
+      employmentType: employmentTypeStr || undefined,
+      experienceLevel: job.jobLevel || undefined,
+      applicationUrl: job.url || '',
+      sourceUrl: job.url || undefined,
+      source: 'Jobicy',
+      postedDate: job.pubDate || undefined,
+      requiredSkills,
+    };
   }
 }
