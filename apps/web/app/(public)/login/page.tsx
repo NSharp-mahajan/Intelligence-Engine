@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSignIn, useAuth } from '@clerk/nextjs';
@@ -12,11 +12,17 @@ export default function LoginPage() {
   const router = useRouter();
   const { isLoaded, signIn, setActive } = useSignIn();
   const { isSignedIn, isLoaded: authLoaded } = useAuth();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [focusedInput, setFocusedInput] = useState<string | null>(null);
+
+  // Forgot Password / Password Reset State
+  const [isResetMode, setIsResetMode] = useState(false);
+  const [resetCodeSent, setResetCodeSent] = useState(false);
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
     if (authLoaded && isSignedIn) {
@@ -24,7 +30,8 @@ export default function LoginPage() {
     }
   }, [authLoaded, isSignedIn, router]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Standard Login Submit
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isLoaded) return;
     setError('');
@@ -52,170 +59,205 @@ export default function LoginPage() {
     }
   };
 
+  // Step 1: Send Password Reset Code
+  const handleSendResetCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isLoaded) return;
+    setError('');
+    setLoading(true);
+
+    try {
+      await signIn.create({
+        strategy: 'reset_password_email_code',
+        identifier: email,
+      });
+      setResetCodeSent(true);
+      setLoading(false);
+    } catch (err: unknown) {
+      console.error(err);
+      const clerkError = err as { errors?: Array<{ longMessage?: string; message?: string }> };
+      setError(clerkError.errors?.[0]?.longMessage || clerkError.errors?.[0]?.message || 'Unable to send password reset code. Please check your email.');
+      setLoading(false);
+    }
+  };
+
+  // Step 2: Attempt Reset with Code & New Password
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isLoaded) return;
+    setError('');
+    setLoading(true);
+
+    try {
+      const result = await signIn.attemptFirstFactor({
+        strategy: 'reset_password_email_code',
+        code: resetCode,
+        password: newPassword,
+      });
+
+      if (result.status === 'complete') {
+        await setActive({ session: result.createdSessionId });
+        router.replace('/sync-profile');
+      } else {
+        setError('Password reset incomplete. Please check your code.');
+        setLoading(false);
+      }
+    } catch (err: unknown) {
+      console.error(err);
+      const clerkError = err as { errors?: Array<{ longMessage?: string; message?: string }> };
+      setError(clerkError.errors?.[0]?.longMessage || clerkError.errors?.[0]?.message || 'Password reset failed. Please check the code and try again.');
+      setLoading(false);
+    }
+  };
+
   return (
     <GlassAuthLayout>
-      <div style={styles.header}>
-        <h2 style={styles.title}>Welcome back</h2>
-        <p style={styles.subtitle}>Continue building your evidence and finding opportunities where you fit.</p>
-      </div>
-
-      <form onSubmit={handleSubmit} style={styles.form}>
-        {error && <div style={styles.errorAlert}>{error}</div>}
-        
-        <div style={styles.inputGroup}>
-          <label style={styles.label}>Email Address</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onFocus={() => setFocusedInput('email')}
-            onBlur={() => setFocusedInput(null)}
-            placeholder="name@example.com"
-            style={{
-              ...styles.input,
-              ...(focusedInput === 'email' ? styles.inputFocused : {})
-            }}
-            required
-            autoComplete="email"
-          />
-        </div>
-        
-        <div style={styles.inputGroup}>
-          <div style={styles.labelRow}>
-            <label style={styles.label}>Password</label>
-            <Link href="#" style={styles.forgotLink}>Forgot password?</Link>
+      {/* FORGOT PASSWORD / RESET MODE */}
+      {isResetMode ? (
+        <>
+          <div style={{ marginBottom: '1.75rem' }}>
+            <h2 className="auth-header-title">Reset your password</h2>
+            <p className="auth-header-subtitle">
+              {resetCodeSent 
+                ? `Enter the reset code sent to ${email} and your new password.` 
+                : 'Enter your email address to receive a password reset code.'}
+            </p>
           </div>
-          <PasswordInput
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onFocus={() => setFocusedInput('password')}
-            onBlur={() => setFocusedInput(null)}
-            isFocused={focusedInput === 'password'}
-          />
-        </div>
-        
-        <button 
-          type="submit" 
-          disabled={loading || !email || !password} 
-          style={{
-            ...styles.button,
-            ...(loading || !email || !password ? styles.buttonDisabled : {})
-          }}
-        >
-          {loading ? 'Signing in...' : 'Sign in'}
-        </button>
-      </form>
 
-      <SocialButtons />
+          {!resetCodeSent ? (
+            /* Reset Step 1: Send Code */
+            <form onSubmit={handleSendResetCode} className="auth-form">
+              {error && <div className="auth-error-alert">{error}</div>}
+              
+              <div className="auth-input-group">
+                <label className="auth-input-label">Email Address</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  className="auth-input-field"
+                  required
+                  autoComplete="email"
+                />
+              </div>
 
-      <div style={styles.footer}>
-        <span style={styles.footerText}>Don't have an account? </span>
-        <Link href="/register" style={styles.footerLink}>Create one</Link>
-      </div>
+              <button 
+                type="submit" 
+                disabled={loading || !email} 
+                className="auth-submit-btn"
+              >
+                {loading ? 'Sending code...' : 'Send reset code'}
+              </button>
+            </form>
+          ) : (
+            /* Reset Step 2: Code & New Password */
+            <form onSubmit={handleResetPasswordSubmit} className="auth-form">
+              {error && <div className="auth-error-alert">{error}</div>}
+              
+              <div className="auth-input-group">
+                <label className="auth-input-label">Reset Code</label>
+                <input
+                  type="text"
+                  value={resetCode}
+                  onChange={(e) => setResetCode(e.target.value)}
+                  placeholder="Enter code"
+                  className="auth-input-field"
+                  required
+                />
+              </div>
+
+              <div className="auth-input-group">
+                <label className="auth-input-label">New Password</label>
+                <PasswordInput
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={loading || !resetCode || !newPassword} 
+                className="auth-submit-btn"
+              >
+                {loading ? 'Resetting password...' : 'Reset password'}
+              </button>
+            </form>
+          )}
+
+          <div className="auth-footer-nav">
+            <button 
+              type="button" 
+              onClick={() => { setIsResetMode(false); setResetCodeSent(false); setError(''); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+              className="auth-footer-link"
+            >
+              Remember your password? Sign in
+            </button>
+          </div>
+        </>
+      ) : (
+        /* STANDARD SIGN IN MODE */
+        <>
+          <div style={{ marginBottom: '1.75rem' }}>
+            <h2 className="auth-header-title">Welcome back</h2>
+            <p className="auth-header-subtitle">
+              Continue building your evidence and finding opportunities where you fit.
+            </p>
+          </div>
+
+          <form onSubmit={handleLoginSubmit} className="auth-form">
+            {error && <div className="auth-error-alert">{error}</div>}
+            
+            <div className="auth-input-group">
+              <label className="auth-input-label">Email Address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@example.com"
+                className="auth-input-field"
+                required
+                autoComplete="email"
+              />
+            </div>
+            
+            <div className="auth-input-group">
+              <div className="auth-label-row">
+                <label className="auth-input-label">Password</label>
+                <button 
+                  type="button" 
+                  onClick={() => { setIsResetMode(true); setError(''); }}
+                  className="auth-forgot-link"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  Forgot password?
+                </button>
+              </div>
+              <PasswordInput
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            
+            <button 
+              type="submit" 
+              disabled={loading || !email || !password} 
+              className="auth-submit-btn"
+            >
+              {loading ? 'Signing in...' : 'Sign in'}
+            </button>
+          </form>
+
+          <SocialButtons />
+
+          <div className="auth-footer-nav">
+            <span style={{ color: '#666862' }}>Don&apos;t have an account? </span>
+            <Link href="/register" className="auth-footer-link">Create one</Link>
+          </div>
+        </>
+      )}
     </GlassAuthLayout>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  header: {
-    marginBottom: '2rem',
-  },
-  title: {
-    fontSize: '2rem', // 32px
-    fontWeight: 800,
-    color: 'var(--text-primary)',
-    letterSpacing: '-0.02em',
-    marginBottom: '0.5rem',
-  },
-  subtitle: {
-    fontSize: '0.9375rem', // 15px
-    color: 'var(--text-secondary)',
-    lineHeight: 1.5,
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1.25rem',
-  },
-  errorAlert: {
-    backgroundColor: 'var(--error-bg)',
-    color: 'var(--error-text)',
-    padding: '0.75rem 1rem',
-    borderRadius: '8px',
-    fontSize: '0.875rem',
-    border: '1px solid var(--error-border)',
-    fontWeight: 500,
-    animation: 'slideUpFade 0.3s ease-out',
-  },
-  inputGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.375rem',
-  },
-  labelRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  label: {
-    fontSize: '0.8125rem', // 13px
-    fontWeight: 600,
-    color: 'var(--text-primary)',
-  },
-  forgotLink: {
-    fontSize: '0.8125rem',
-    color: 'var(--text-secondary)',
-    textDecoration: 'none',
-    fontWeight: 500,
-  },
-  input: {
-    width: '100%',
-    padding: '0.75rem 1rem', // ~52px total height approx depending on box-sizing
-    borderRadius: '12px',
-    border: '1px solid var(--border-light)',
-    fontSize: '0.9375rem', // 15px
-    color: 'var(--text-primary)',
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    outline: 'none',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-  },
-  inputFocused: {
-    border: '1px solid var(--accent-primary)',
-    boxShadow: '0 0 0 3px rgba(234, 88, 12, 0.15)',
-    backgroundColor: '#ffffff',
-  },
-  button: {
-    width: '100%',
-    padding: '0.875rem', 
-    backgroundColor: 'var(--accent-primary)', // Orange primary CTA
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '12px',
-    fontSize: '0.875rem', // 14px
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    marginTop: '0.5rem',
-    boxShadow: '0 4px 12px rgba(234, 88, 12, 0.2)',
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-    cursor: 'not-allowed',
-    boxShadow: 'none',
-  },
-  footer: {
-    marginTop: '2rem',
-    textAlign: 'center',
-  },
-  footerText: {
-    fontSize: '0.875rem',
-    color: 'var(--text-secondary)',
-  },
-  footerLink: {
-    fontSize: '0.875rem',
-    color: 'var(--text-primary)',
-    fontWeight: 700,
-    textDecoration: 'none',
-  }
-};

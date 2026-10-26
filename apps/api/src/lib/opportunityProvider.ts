@@ -1,4 +1,5 @@
 import { PrismaClient, RequirementType } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 // Define enum values locally to avoid Prisma client generation issues
 const OpportunityType = {
@@ -79,6 +80,10 @@ export interface OpportunityProvider {
   name: string;
   fetch(): Promise<ExternalJob[]>;
 }
+
+export * from './jobicyProvider';
+export * from './greenhouseProvider';
+export * from './leverProvider';
 
 export class OpportunityNormalizer {
   private skillNormalizationMap: Map<string, string> = new Map([
@@ -248,18 +253,112 @@ export class OpportunityIngestor {
     private deduplicator: OpportunityDeduplicator = new OpportunityDeduplicator(),
   ) {}
 
-  async ingest(provider: OpportunityProvider): Promise<{ created: number; skipped: number; errors: number }> {
+  async ingest(provider: OpportunityProvider): Promise<{ created: number; updated: number; skipped: number; errors: number }> {
     const jobs = await provider.fetch();
     let created = 0;
+    let updated = 0;
     let skipped = 0;
     let errors = 0;
 
     for (const job of jobs) {
       try {
         const normalized = this.normalizer.normalize(job);
+        const now = new Date();
 
         const existingId = await this.deduplicator.findExisting(this.prisma, normalized);
+
         if (existingId) {
+          await this.prisma.$transaction(async (tx) => {
+            const existing = await tx.opportunity.findUnique({
+              where: { id: existingId },
+            });
+
+            if (existing) {
+              await tx.opportunity.update({
+                where: { id: existingId },
+                data: {
+                  title: normalized.title,
+                  organization: normalized.organization,
+                  description: normalized.description,
+                  type: normalized.type !== OpportunityType.JOB ? normalized.type : existing.type,
+                  location: normalized.location !== null ? normalized.location : existing.location,
+                  workMode: normalized.workMode !== WorkMode.UNKNOWN ? normalized.workMode : existing.workMode,
+                  employmentType: normalized.employmentType !== EmploymentType.UNKNOWN ? normalized.employmentType : existing.employmentType,
+                  experienceLevel: normalized.experienceLevel !== ExperienceLevel.UNKNOWN ? normalized.experienceLevel : existing.experienceLevel,
+                  applicationUrl: normalized.applicationUrl,
+                  sourceUrl: normalized.sourceUrl !== null ? normalized.sourceUrl : existing.sourceUrl,
+                  postedDate: normalized.postedDate !== null ? normalized.postedDate : existing.postedDate,
+                  deadline: normalized.deadline !== null ? normalized.deadline : existing.deadline,
+                  lastSeenAt: now,
+                  updatedAt: now,
+                },
+              });
+
+              // Refresh OpportunitySkill relations when source requirements are provided
+              const hasSkills = (normalized.requiredSkills && normalized.requiredSkills.length > 0) ||
+                                (normalized.preferredSkills && normalized.preferredSkills.length > 0);
+
+              if (hasSkills) {
+                await tx.opportunitySkill.deleteMany({
+                  where: { opportunityId: existingId },
+                });
+
+                const reqSkillIds: string[] = [];
+                for (const skillName of normalized.requiredSkills) {
+                  const skill = await tx.skill.upsert({
+                    where: { name: skillName },
+                    update: {},
+                    create: {
+                      id: randomUUID(),
+                      name: skillName,
+                      category: 'TOOL',
+                    },
+                  });
+                  if (!reqSkillIds.includes(skill.id)) {
+                    reqSkillIds.push(skill.id);
+                  }
+                }
+
+                for (const skillId of reqSkillIds) {
+                  await tx.opportunitySkill.create({
+                    data: {
+                      opportunityId: existingId,
+                      skillId,
+                      requirementType: RequirementType.REQUIRED,
+                    },
+                  });
+                }
+
+                const prefSkillIds: string[] = [];
+                for (const skillName of normalized.preferredSkills) {
+                  const skill = await tx.skill.upsert({
+                    where: { name: skillName },
+                    update: {},
+                    create: {
+                      id: randomUUID(),
+                      name: skillName,
+                      category: 'TOOL',
+                    },
+                  });
+                  if (!prefSkillIds.includes(skill.id) && !reqSkillIds.includes(skill.id)) {
+                    prefSkillIds.push(skill.id);
+                  }
+                }
+
+                for (const skillId of prefSkillIds) {
+                  await tx.opportunitySkill.create({
+                    data: {
+                      opportunityId: existingId,
+                      skillId,
+                      requirementType: RequirementType.PREFERRED,
+                    },
+                  });
+                }
+              }
+            }
+          });
+
+          updated++;
           skipped++;
           continue;
         }
@@ -267,6 +366,7 @@ export class OpportunityIngestor {
         await this.prisma.$transaction(async (tx) => {
           const opportunity = await tx.opportunity.create({
             data: {
+              id: randomUUID(),
               title: normalized.title,
               organization: normalized.organization,
               description: normalized.description,
@@ -281,36 +381,58 @@ export class OpportunityIngestor {
               sourceJobId: normalized.sourceJobId,
               postedDate: normalized.postedDate,
               deadline: normalized.deadline,
+              lastSeenAt: now,
+              updatedAt: now,
             },
           });
 
+          const createdReqSkillIds: string[] = [];
           for (const skillName of normalized.requiredSkills) {
             const skill = await tx.skill.upsert({
               where: { name: skillName },
               update: {},
-              create: { name: skillName, category: 'TOOL' },
+              create: {
+                id: randomUUID(),
+                name: skillName,
+                category: 'TOOL',
+              },
             });
+            if (!createdReqSkillIds.includes(skill.id)) {
+              createdReqSkillIds.push(skill.id);
+            }
+          }
 
+          for (const skillId of createdReqSkillIds) {
             await tx.opportunitySkill.create({
               data: {
                 opportunityId: opportunity.id,
-                skillId: skill.id,
+                skillId,
                 requirementType: RequirementType.REQUIRED,
               },
             });
           }
 
+          const createdPrefSkillIds: string[] = [];
           for (const skillName of normalized.preferredSkills) {
             const skill = await tx.skill.upsert({
               where: { name: skillName },
               update: {},
-              create: { name: skillName, category: 'TOOL' },
+              create: {
+                id: randomUUID(),
+                name: skillName,
+                category: 'TOOL',
+              },
             });
+            if (!createdPrefSkillIds.includes(skill.id) && !createdReqSkillIds.includes(skill.id)) {
+              createdPrefSkillIds.push(skill.id);
+            }
+          }
 
+          for (const skillId of createdPrefSkillIds) {
             await tx.opportunitySkill.create({
               data: {
                 opportunityId: opportunity.id,
-                skillId: skill.id,
+                skillId,
                 requirementType: RequirementType.PREFERRED,
               },
             });
@@ -324,6 +446,6 @@ export class OpportunityIngestor {
       }
     }
 
-    return { created, skipped, errors };
+    return { created, updated, skipped, errors };
   }
 }

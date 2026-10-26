@@ -73,7 +73,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
         linkedinUrl: linkedinUrl || null,
         portfolioUrl: portfolioUrl || null,
       },
-    });z
+    });
 
     res.status(201).json({ profile, profileComplete: isProfileComplete(profile) });
   } catch (error) {

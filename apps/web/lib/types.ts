@@ -73,6 +73,13 @@ export interface OpportunitySkill {
   skill: Skill;
 }
 
+export interface OpportunityMatchSummary {
+  score: number | null;
+  hasStructuredRequirements: boolean;
+  matchedCount: number;
+  missingCount: number;
+}
+
 export interface Opportunity {
   id: string;
   title: string;
@@ -92,6 +99,7 @@ export interface Opportunity {
   createdAt: string;
   updatedAt: string;
   opportunitySkills: OpportunitySkill[];
+  match?: OpportunityMatchSummary | null;
 }
 
 export interface OpportunitiesResponse {
@@ -107,3 +115,75 @@ export interface OpportunitiesResponse {
 export interface OpportunityResponse {
   opportunity: Opportunity;
 }
+
+export interface SkillEvidenceItem {
+  skillId: string;
+  skillName: string;
+  isDirect: boolean;
+  projectName?: string;
+  projectId?: string;
+}
+
+export interface MatchSkill {
+  skillId: string;
+  skillName: string;
+}
+
+export interface MatchResultResponse {
+  score: number | null;
+  requiredMatched: MatchSkill[];
+  requiredMissing: MatchSkill[];
+  preferredMatched: MatchSkill[];
+  preferredMissing: MatchSkill[];
+  evidence: Record<string, SkillEvidenceItem[]>;
+  hasStructuredRequirements: boolean;
+}
+
+export interface DashboardRecommendation {
+  id: string;
+  title: string;
+  organization: string;
+  location: string | null;
+  workMode: string;
+  type?: string;
+  experienceLevel?: string;
+  source?: string;
+  opportunitySkills?: Array<{
+    skillId: string;
+    requirementType: string;
+    skill: {
+      id?: string;
+      name: string;
+      category?: string;
+    };
+  }>;
+  match: {
+    score: number;
+    matchedCount: number;
+    missingCount: number;
+    hasStructuredRequirements: boolean;
+    matchedSkills?: string[];
+    missingSkills?: string[];
+  };
+}
+
+export interface SkillGap {
+  skillId: string;
+  skillName: string;
+  opportunityCount: number;
+}
+
+export interface DashboardResponse {
+  hasProfile: boolean;
+  profileComplete: boolean;
+  hasSkillsOrEvidence: boolean;
+  hasStructuredOpportunities: boolean;
+  metrics: {
+    skillsCount: number;
+    projectsCount: number;
+    matchedOpportunitiesCount: number;
+  };
+  recommendations: DashboardRecommendation[];
+  skillGaps: SkillGap[];
+}
+

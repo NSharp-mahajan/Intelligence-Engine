@@ -53,10 +53,10 @@ async function main() {
     const normalizer = new OpportunityNormalizer();
     
     const testSkills = ['React.js', 'ReactJS', 'react', 'Vue.js', 'Node.js', 'nodejs'];
-    const normalized = testSkills.map(s => normalizer.normalizeSkill(s));
+    const normalizedSkills = testSkills.map(s => normalizer.normalizeSkill(s));
     console.log('  Input:', testSkills);
-    console.log('  Output:', normalized);
-    console.log('  Result:', normalized.every(s => s === s.toLowerCase()) ? 'PASS' : 'FAIL');
+    console.log('  Output:', normalizedSkills);
+    console.log('  Result:', normalizedSkills.every(s => s === s.toLowerCase()) ? 'PASS' : 'FAIL');
     console.log();
 
     // Test 2: Work Mode Normalization

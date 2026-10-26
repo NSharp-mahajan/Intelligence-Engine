@@ -133,6 +133,7 @@ model Opportunity {
   sourceJobId       String?
   postedDate        DateTime?
   deadline          DateTime?
+  lastSeenAt        DateTime           @default(now())
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   opportunitySkills OpportunitySkill[]
@@ -145,6 +146,7 @@ model Opportunity {
   @@index([location])
   @@index([postedDate])
   @@index([deadline])
+  @@index([lastSeenAt])
 }
 
 enum RequirementType {

@@ -7,9 +7,11 @@ export interface AuthRequest extends Request {
   auth?: ReturnType<typeof getAuth>;
 }
 
-export const requireAuth = [
-  clerkRequireAuth(),
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const requireAuth = (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (req.userId) {
+    return next();
+  }
+  return clerkRequireAuth()(req, res, async () => {
     try {
       const auth = getAuth(req);
       if (!auth || !auth.userId) {
@@ -34,5 +36,5 @@ export const requireAuth = [
       res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
       return;
     }
-  }
-];
+  });
+};
