@@ -1,9 +1,11 @@
 import { Router, Response, Request } from 'express';
 import { z } from 'zod';
 import { getAuth } from '@clerk/express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middlewares/authMiddleware';
 import { MatchingService } from '../services/matchingService';
+import { resolveCompanyLogoUrl } from '../services/companyLogoService';
 
 const router = Router();
 
@@ -112,7 +114,7 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     if (source) {
-      where.source = source;
+      where.source = { equals: source, mode: 'insensitive' };
     }
 
     if (excludeExpired) {
@@ -160,6 +162,7 @@ router.get('/', async (req: Request, res: Response) => {
         const matchResult = matchingService.matchEvidenceToOpportunity(evidenceMap, opp);
         return {
           ...opp,
+          companyLogoUrl: resolveCompanyLogoUrl(opp.organization, opp.applicationUrl, opp.sourceUrl),
           match: matchingService.getMatchSummary(matchResult),
         };
       });
@@ -235,39 +238,130 @@ router.get('/', async (req: Request, res: Response) => {
       return;
     }
 
-    // Branch 2: Standard database sorting (e.g. postedDate desc, postedDate asc)
-    let orderBy: any = { postedDate: 'desc' };
-    if (sort === 'posted_asc') {
-      orderBy = { postedDate: 'asc' };
-    }
+    // Branch 2: Standard database sorting OR Balanced Source Discovery
+    let opportunities: any[] = [];
+    let total = 0;
 
-    const [opportunities, total] = await Promise.all([
-      prisma.opportunity.findMany({
-        where,
-        include: {
-          opportunitySkills: {
-            include: {
-              skill: true,
+    const isExplicitDateSort = sort === 'posted_asc' || sort === 'posted_desc';
+
+    if (isExplicitDateSort) {
+      const sortOrder: Prisma.SortOrder = sort === 'posted_asc' ? 'asc' : 'desc';
+      const orderBy = { postedDate: sortOrder };
+      const [opps, count] = await Promise.all([
+        prisma.opportunity.findMany({
+          where,
+          include: {
+            opportunitySkills: {
+              include: {
+                skill: true,
+              },
             },
           },
-        },
-        orderBy,
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.opportunity.count({ where }),
-    ]);
+          orderBy: [
+            orderBy,
+            { createdAt: sortOrder },
+            { id: 'asc' },
+          ],
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        prisma.opportunity.count({ where }),
+      ]);
+      opportunities = opps;
+      total = count;
+    } else {
+      // Default / "balanced": Balanced Round-Robin Feed across sources
+      const sqlConditions: Prisma.Sql[] = [];
+      if (searchTerm) {
+        sqlConditions.push(Prisma.sql`("title" ILIKE ${'%' + searchTerm + '%'} OR "organization" ILIKE ${'%' + searchTerm + '%'})`);
+      }
+      if (location) {
+        sqlConditions.push(Prisma.sql`"location" ILIKE ${'%' + location + '%'}`);
+      }
+      if (type) {
+        sqlConditions.push(Prisma.sql`"type" = ${type}::"OpportunityType"`);
+      }
+      if (workMode) {
+        sqlConditions.push(Prisma.sql`"workMode" = ${workMode}::"WorkMode"`);
+      }
+      if (employmentType) {
+        sqlConditions.push(Prisma.sql`"employmentType" = ${employmentType}::"EmploymentType"`);
+      }
+      if (experienceLevel) {
+        sqlConditions.push(Prisma.sql`"experienceLevel" = ${experienceLevel}::"ExperienceLevel"`);
+      }
+      if (source) {
+        sqlConditions.push(Prisma.sql`"source" ILIKE ${source}`);
+      }
+      if (excludeExpired) {
+        sqlConditions.push(Prisma.sql`("deadline" IS NULL OR "deadline" >= NOW())`);
+      }
+      if (skill) {
+        sqlConditions.push(Prisma.sql`EXISTS (
+          SELECT 1 FROM "OpportunitySkill" os
+          JOIN "Skill" s ON os."skillId" = s."id"
+          WHERE os."opportunityId" = "Opportunity"."id" AND s."name" ILIKE ${'%' + skill + '%'}
+        )`);
+      }
+
+      const whereClause = sqlConditions.length > 0
+        ? Prisma.sql`WHERE ${Prisma.join(sqlConditions, ' AND ')}`
+        : Prisma.empty;
+
+      const rankedQuery = Prisma.sql`
+        SELECT id FROM (
+          SELECT id,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY source
+                   ORDER BY "postedDate" DESC NULLS LAST, "createdAt" DESC, id ASC
+                 ) as source_rank,
+                 source
+          FROM "Opportunity"
+          ${whereClause}
+        ) ranked
+        ORDER BY source_rank ASC, source ASC
+        LIMIT ${limit} OFFSET ${(page - 1) * limit}
+      `;
+
+      const [idRows, count] = await Promise.all([
+        prisma.$queryRaw<Array<{ id: string }>>(rankedQuery),
+        prisma.opportunity.count({ where }),
+      ]);
+
+      total = count;
+      const ids = idRows.map((r) => r.id);
+
+      if (ids.length > 0) {
+        const opps = await prisma.opportunity.findMany({
+          where: { id: { in: ids } },
+          include: {
+            opportunitySkills: {
+              include: {
+                skill: true,
+              },
+            },
+          },
+        });
+        const idMap = new Map(opps.map((o) => [o.id, o]));
+        opportunities = ids.map((id) => idMap.get(id)).filter(Boolean);
+      } else {
+        opportunities = [];
+      }
+    }
 
     const enrichedOpportunities = opportunities.map((opp) => {
+      const companyLogoUrl = resolveCompanyLogoUrl(opp.organization, opp.applicationUrl, opp.sourceUrl);
       if (evidenceMap) {
         const matchResult = matchingService.matchEvidenceToOpportunity(evidenceMap, opp);
         return {
           ...opp,
+          companyLogoUrl,
           match: matchingService.getMatchSummary(matchResult),
         };
       }
       return {
         ...opp,
+        companyLogoUrl,
         match: null,
       };
     });
@@ -355,7 +449,12 @@ router.get('/:opportunityId', async (req: any, res: Response) => {
       return;
     }
 
-    res.json({ opportunity });
+    res.json({
+      opportunity: {
+        ...opportunity,
+        companyLogoUrl: resolveCompanyLogoUrl(opportunity.organization, opportunity.applicationUrl, opportunity.sourceUrl),
+      },
+    });
   } catch (error) {
     console.error('Get opportunity error:', error);
     res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });

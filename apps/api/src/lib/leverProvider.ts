@@ -92,11 +92,12 @@ export class LeverProvider implements OpportunityProvider {
   constructor(options?: LeverProviderOptions | LeverBoardConfig[]) {
     if (Array.isArray(options)) {
       this.boards = options.length > 0 ? options : DEFAULT_LEVER_BOARDS;
-      this.timeoutMs = 15000;
+      this.timeoutMs = 30000;
+      this.maxJobsPerBoard = 25;
     } else {
       this.boards = options?.boards && options.boards.length > 0 ? options.boards : DEFAULT_LEVER_BOARDS;
-      this.timeoutMs = options?.timeoutMs ?? 15000;
-      this.maxJobsPerBoard = options?.maxJobsPerBoard;
+      this.timeoutMs = options?.timeoutMs ?? 30000;
+      this.maxJobsPerBoard = options?.maxJobsPerBoard !== undefined ? options.maxJobsPerBoard : 25;
     }
   }
 
@@ -126,7 +127,10 @@ export class LeverProvider implements OpportunityProvider {
    * Fetches and transforms jobs for a single Lever site.
    */
   async fetchBoard(board: LeverBoardConfig): Promise<ExternalJob[]> {
-    const url = `https://api.lever.co/v0/postings/${encodeURIComponent(board.site)}?mode=json`;
+    const limitQuery = this.maxJobsPerBoard && this.maxJobsPerBoard > 0
+      ? `&limit=${encodeURIComponent(this.maxJobsPerBoard)}`
+      : '';
+    const url = `https://api.lever.co/v0/postings/${encodeURIComponent(board.site)}?mode=json${limitQuery}`;
 
     const response = await fetch(url, {
       headers: {

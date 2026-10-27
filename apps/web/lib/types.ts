@@ -100,6 +100,7 @@ export interface Opportunity {
   updatedAt: string;
   opportunitySkills: OpportunitySkill[];
   match?: OpportunityMatchSummary | null;
+  companyLogoUrl?: string | null;
 }
 
 export interface OpportunitiesResponse {
@@ -186,4 +187,3 @@ export interface DashboardResponse {
   recommendations: DashboardRecommendation[];
   skillGaps: SkillGap[];
 }
-

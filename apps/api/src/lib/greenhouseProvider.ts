@@ -83,11 +83,12 @@ export class GreenhouseProvider implements OpportunityProvider {
   constructor(options?: GreenhouseProviderOptions | GreenhouseBoardConfig[]) {
     if (Array.isArray(options)) {
       this.boards = options.length > 0 ? options : DEFAULT_GREENHOUSE_BOARDS;
-      this.timeoutMs = 15000;
+      this.timeoutMs = 30000;
+      this.maxJobsPerBoard = 25;
     } else {
       this.boards = options?.boards && options.boards.length > 0 ? options.boards : DEFAULT_GREENHOUSE_BOARDS;
-      this.timeoutMs = options?.timeoutMs ?? 15000;
-      this.maxJobsPerBoard = options?.maxJobsPerBoard;
+      this.timeoutMs = options?.timeoutMs ?? 30000;
+      this.maxJobsPerBoard = options?.maxJobsPerBoard !== undefined ? options.maxJobsPerBoard : 25;
     }
   }
 

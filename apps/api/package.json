@@ -11,6 +11,8 @@
     "ingest:once": "tsx src/worker.ts --once",
     "ingest:worker": "tsx src/worker.ts",
     "ingest:jobicy": "tsx src/ingestJobicy.ts",
+    "ingest:greenhouse": "tsx src/ingestGreenhouse.ts",
+    "ingest:lever": "tsx src/ingestLever.ts",
     "backfill:skills": "tsx src/backfillOpportunitySkills.ts",
     "reconcile:skills": "tsx src/reconcileSkills.ts"
   },

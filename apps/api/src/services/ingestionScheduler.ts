@@ -6,8 +6,10 @@ import {
   JobicyProvider,
   GreenhouseProvider,
   DEFAULT_GREENHOUSE_BOARDS,
+  GreenhouseBoardConfig,
   LeverProvider,
   DEFAULT_LEVER_BOARDS,
+  LeverBoardConfig,
 } from '../lib/opportunityProvider';
 
 // ─── Constants & Advisory Lock Key ──────────────────────────────────────────
@@ -40,6 +42,10 @@ export interface IngestionConfig {
   jobicyCount: number;
   /** Optional max jobs per board for Greenhouse / Lever pilot runs */
   maxJobsPerBoard?: number;
+  /** Optional Greenhouse board configurations */
+  greenhouseBoards?: GreenhouseBoardConfig[];
+  /** Optional Lever board configurations */
+  leverBoards?: LeverBoardConfig[];
 }
 
 export interface ProviderRunResult {
@@ -74,6 +80,28 @@ export type ProviderFactory = (name: string, config: IngestionConfig) => Opportu
 
 // ─── Default Configuration Loader ───────────────────────────────────────────
 
+export function parseGreenhouseBoardsFromEnv(envValue?: string): GreenhouseBoardConfig[] | undefined {
+  if (!envValue || !envValue.trim()) return undefined;
+  const entries = envValue.split(',').map((s) => s.trim()).filter(Boolean);
+  if (entries.length === 0) return undefined;
+  return entries.map((entry) => {
+    const [token, ...rest] = entry.split(':');
+    const name = rest.join(':').trim() || token.charAt(0).toUpperCase() + token.slice(1);
+    return { boardToken: token.trim(), companyName: name };
+  });
+}
+
+export function parseLeverBoardsFromEnv(envValue?: string): LeverBoardConfig[] | undefined {
+  if (!envValue || !envValue.trim()) return undefined;
+  const entries = envValue.split(',').map((s) => s.trim()).filter(Boolean);
+  if (entries.length === 0) return undefined;
+  return entries.map((entry) => {
+    const [site, ...rest] = entry.split(':');
+    const name = rest.join(':').trim() || site.charAt(0).toUpperCase() + site.slice(1);
+    return { site: site.trim(), companyName: name };
+  });
+}
+
 export function loadIngestionConfigFromEnv(): IngestionConfig {
   const envProviders = process.env.INGESTION_PROVIDERS
     ? process.env.INGESTION_PROVIDERS.split(',').map((p) => p.trim().toLowerCase()).filter(Boolean)
@@ -101,7 +129,7 @@ export function loadIngestionConfigFromEnv(): IngestionConfig {
 
   const maxJobsPerBoard = process.env.INGESTION_MAX_JOBS_PER_BOARD
     ? parseInt(process.env.INGESTION_MAX_JOBS_PER_BOARD, 10)
-    : undefined;
+    : 25;
 
   return {
     providers: envProviders,
@@ -111,7 +139,9 @@ export function loadIngestionConfigFromEnv(): IngestionConfig {
     retryDelayMs: isNaN(retryDelayMs) || retryDelayMs < 100 ? 1000 : retryDelayMs,
     timeoutMs: isNaN(timeoutMs) || timeoutMs < 1000 ? 30000 : timeoutMs,
     jobicyCount: isNaN(jobicyCount) || jobicyCount < 1 ? 50 : jobicyCount,
-    maxJobsPerBoard: maxJobsPerBoard && !isNaN(maxJobsPerBoard) ? maxJobsPerBoard : undefined,
+    maxJobsPerBoard: maxJobsPerBoard && !isNaN(maxJobsPerBoard) ? maxJobsPerBoard : 25,
+    greenhouseBoards: parseGreenhouseBoardsFromEnv(process.env.GREENHOUSE_BOARDS),
+    leverBoards: parseLeverBoardsFromEnv(process.env.LEVER_BOARDS),
   };
 }
 
@@ -123,13 +153,13 @@ export const defaultProviderFactory: ProviderFactory = (name: string, config: In
       return new JobicyProvider(config.jobicyCount);
     case 'greenhouse':
       return new GreenhouseProvider({
-        boards: DEFAULT_GREENHOUSE_BOARDS,
+        boards: config.greenhouseBoards && config.greenhouseBoards.length > 0 ? config.greenhouseBoards : DEFAULT_GREENHOUSE_BOARDS,
         maxJobsPerBoard: config.maxJobsPerBoard,
         timeoutMs: config.timeoutMs,
       });
     case 'lever':
       return new LeverProvider({
-        boards: DEFAULT_LEVER_BOARDS,
+        boards: config.leverBoards && config.leverBoards.length > 0 ? config.leverBoards : DEFAULT_LEVER_BOARDS,
         maxJobsPerBoard: config.maxJobsPerBoard,
         timeoutMs: config.timeoutMs,
       });

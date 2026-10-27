@@ -20,6 +20,7 @@ OPTIONS:
   --providers=<list>      Comma-separated list of providers to run (e.g. --providers=jobicy,lever).
                           Overrides INGESTION_PROVIDERS environment variable.
   --interval=<minutes>    Override scheduled interval in minutes for daemon mode.
+  --limit=<count>         Maximum jobs per board for Greenhouse / Lever (default: 25).
   --no-immediate          When starting in daemon mode, wait for the first interval instead of running immediately.
   --help, -h              Display this help message.
 
@@ -78,11 +79,20 @@ async function main() {
     if (!isNaN(parsed) && parsed > 0) intervalOverride = parsed;
   }
 
+  // Parse optional --limit or --max-jobs override
+  let limitOverride: number | undefined;
+  const limitArg = args.find((a) => a.startsWith('--limit=') || a.startsWith('--max-jobs='));
+  if (limitArg) {
+    const parsed = parseInt(limitArg.split('=')[1], 10);
+    if (!isNaN(parsed) && parsed > 0) limitOverride = parsed;
+  }
+
   const baseConfig = loadIngestionConfigFromEnv();
   const config = {
     ...baseConfig,
     ...(providerOverride ? { providers: providerOverride } : {}),
     ...(intervalOverride ? { intervalMinutes: intervalOverride } : {}),
+    ...(limitOverride !== undefined ? { maxJobsPerBoard: limitOverride } : {}),
   };
 
   const scheduler = new IngestionScheduler(prisma, config, defaultProviderFactory);

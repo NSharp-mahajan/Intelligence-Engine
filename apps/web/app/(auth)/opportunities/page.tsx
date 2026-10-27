@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { fetchApi } from '../../../lib/api';
 import { Button } from '../../../components/ui/Button';
+import { CompanyLogo } from '../../../components/CompanyLogo';
 import type { OpportunitiesResponse, Opportunity } from '../../../lib/types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -80,33 +81,40 @@ function OpportunityCard({ opp }: { opp: Opportunity }) {
   return (
     <article style={card.root} className="opp-card">
       <div style={card.headerRow}>
-        <div style={card.titleBlock}>
-          <h2 style={card.title}>
-            <Link href={`/opportunities/${opp.id}`} style={card.titleLink}>
-              {opp.title}
-            </Link>
-          </h2>
+        <div style={card.identityGroup}>
+          <CompanyLogo
+            organization={opp.organization}
+            logoUrl={opp.companyLogoUrl}
+            size={46}
+          />
+          <div style={card.titleBlock}>
+            <h2 style={card.title}>
+              <Link href={`/opportunities/${opp.id}`} style={card.titleLink}>
+                {opp.title}
+              </Link>
+            </h2>
 
-          <div style={card.orgLine}>
-            <span style={card.company}>{opp.organization}</span>
-            {opp.location && (
-              <>
-                <span style={card.dot}>·</span>
-                <span style={card.location}>{opp.location}</span>
-              </>
-            )}
-            {opp.workMode && opp.workMode !== 'UNKNOWN' && (
-              <>
-                <span style={card.dot}>·</span>
-                <span style={card.workMode}>{fmtEnum(opp.workMode)}</span>
-              </>
-            )}
-            {opp.source && (
-              <>
-                <span style={card.dot}>·</span>
-                <span style={card.sourceBadge}>via {formatSourceName(opp.source)}</span>
-              </>
-            )}
+            <div style={card.orgLine}>
+              <span style={card.company}>{opp.organization}</span>
+              {opp.location && (
+                <>
+                  <span style={card.dot}>·</span>
+                  <span style={card.location}>{opp.location}</span>
+                </>
+              )}
+              {opp.workMode && opp.workMode !== 'UNKNOWN' && (
+                <>
+                  <span style={card.dot}>·</span>
+                  <span style={card.workMode}>{fmtEnum(opp.workMode)}</span>
+                </>
+              )}
+              {opp.source && (
+                <>
+                  <span style={card.dot}>·</span>
+                  <span style={card.sourceBadge}>via {formatSourceName(opp.source)}</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -205,12 +213,21 @@ const card: Record<string, React.CSSProperties> = {
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: '18px',
+    flexWrap: 'wrap',
+  },
+  identityGroup: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '14px',
+    flex: '1 1 auto',
+    minWidth: 0,
   },
   titleBlock: {
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
     flex: '1 1 auto',
+    minWidth: 0,
   },
   title: {
     fontSize: '1.1875rem',
@@ -487,8 +504,11 @@ const MATCH_FILTER_OPTIONS = [
 ];
 
 const SORT_OPTIONS = [
+  { label: 'Balanced Discovery (Default)', value: '' },
   { label: 'Match: High to Low', value: 'match_desc' },
   { label: 'Match: Low to High', value: 'match_asc' },
+  { label: 'Newest Posted', value: 'posted_desc' },
+  { label: 'Oldest Posted', value: 'posted_asc' },
 ];
 
 // ─── Skeletons ───────────────────────────────────────────────────────────────
@@ -792,20 +812,18 @@ function OpportunitiesContent() {
             <select
               value={sort}
               onChange={(e) => handleFilterChange('sort', e.target.value)}
-              disabled={isMatchControlDisabled}
-              style={{
-                ...pageStyles.select,
-                ...(isMatchControlDisabled ? pageStyles.selectDisabled : {}),
-              }}
-              title={data !== null && !hasMatchData ? 'Match sorting requires candidate profile' : undefined}
+              style={pageStyles.select}
               aria-label="Sort Order"
             >
-              <option value="">Newest First</option>
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              <option value="">Balanced Discovery (Default)</option>
+              <option value="match_desc" disabled={!hasMatchData}>
+                Match: High to Low {!hasMatchData ? '(Profile required)' : ''}
+              </option>
+              <option value="match_asc" disabled={!hasMatchData}>
+                Match: Low to High {!hasMatchData ? '(Profile required)' : ''}
+              </option>
+              <option value="posted_desc">Newest Posted</option>
+              <option value="posted_asc">Oldest Posted</option>
             </select>
           </div>
         </div>

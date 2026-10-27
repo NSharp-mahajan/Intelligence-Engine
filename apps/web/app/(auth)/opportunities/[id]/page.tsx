@@ -6,6 +6,7 @@ import { fetchApi } from '../../../../lib/api';
 import { Badge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Card, CardBody } from '../../../../components/ui/Card';
+import { CompanyLogo } from '../../../../components/CompanyLogo';
 import type { OpportunityResponse, Opportunity, MatchResultResponse } from '../../../../lib/types';
 
 function formatDate(dateString: string | null): string {
@@ -178,26 +179,35 @@ export default function OpportunityDetailPage({ params }: PageProps) {
       </Link>
 
       <div style={styles.header}>
-        <h1 style={styles.title}>{opportunity.title}</h1>
-        <div style={styles.metaRow}>
-          <span style={styles.company}>{opportunity.organization}</span>
-          {opportunity.location && (
-            <>
-              <span style={styles.sep}>·</span>
-              <span style={styles.location}>{opportunity.location}</span>
-            </>
-          )}
-          {opportunity.source && (
-            <>
-              <span style={styles.sep}>·</span>
-              <span style={styles.sourceTag}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: '4px' }}>
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                </svg>
-                via {formatSourceName(opportunity.source)}
-              </span>
-            </>
-          )}
+        <div style={styles.headerIdentity}>
+          <CompanyLogo
+            organization={opportunity.organization}
+            logoUrl={opportunity.companyLogoUrl}
+            size={54}
+          />
+          <div style={styles.headerTitles}>
+            <h1 style={styles.title}>{opportunity.title}</h1>
+            <div style={styles.metaRow}>
+              <span style={styles.company}>{opportunity.organization}</span>
+              {opportunity.location && (
+                <>
+                  <span style={styles.sep}>·</span>
+                  <span style={styles.location}>{opportunity.location}</span>
+                </>
+              )}
+              {opportunity.source && (
+                <>
+                  <span style={styles.sep}>·</span>
+                  <span style={styles.sourceTag}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ display: 'inline-block', verticalAlign: '-1px', marginRight: '4px' }}>
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    via {formatSourceName(opportunity.source)}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
         </div>
         
         <div style={styles.badgeRow}>
@@ -538,9 +548,21 @@ const styles: Record<string, React.CSSProperties> = {
   header: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '16px',
     paddingBottom: '24px',
     borderBottom: '1px solid var(--border-light)',
+  },
+  headerIdentity: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '18px',
+  },
+  headerTitles: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    flex: '1 1 auto',
+    minWidth: 0,
   },
   title: {
     fontSize: '2rem',
