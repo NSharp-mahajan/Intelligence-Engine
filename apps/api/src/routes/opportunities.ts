@@ -6,6 +6,13 @@ import { prisma } from '../lib/prisma';
 import { requireAuth, AuthRequest } from '../middlewares/authMiddleware';
 import { MatchingService } from '../services/matchingService';
 import { resolveCompanyLogoUrl } from '../services/companyLogoService';
+import {
+  IndiaLocationClassifier,
+  OVERSEAS_LOCATION_SQL_PATTERN,
+  OVERSEAS_RESTRICTIONS_SQL_PATTERN,
+  INDIA_TECH_HUBS_SQL_PATTERN,
+} from '../services/indiaLocationClassifier';
+import { interleaveOpportunitiesByEmployer } from '../services/employerInterleaving';
 
 const router = Router();
 
@@ -377,6 +384,395 @@ router.get('/', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Get opportunities error:', error);
+    res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
+  }
+});
+
+// GET /api/opportunities/india - Dedicated India Opportunities Feed
+const indiaListQuerySchema = z.object({
+  city: z.enum(['Bengaluru', 'Hyderabad', 'Pune', 'Delhi-NCR', 'Mumbai', 'Chennai', 'All']).optional(),
+  workMode: z.enum(['REMOTE', 'HYBRID', 'ONSITE', 'UNKNOWN']).optional(),
+  stage: z.enum(['INTERNSHIP', 'ENTRY', 'ALL']).optional(),
+  search: z.string().optional(),
+  skill: z.string().optional(),
+  matchFilter: z.enum(['80_plus', '60_plus', '40_plus', 'below_40', 'unavailable']).optional(),
+  sort: z.enum(['balanced', 'posted_desc', 'posted_asc', 'match_desc', 'match_asc', '']).optional(),
+  page: z.string().optional().transform((val) => (val ? Math.max(1, parseInt(val, 10)) : 1)),
+  limit: z.string().optional().transform((val) => (val ? Math.min(100, Math.max(1, parseInt(val, 10))) : 20)),
+});
+
+function normalizeCityQuery(rawCity?: string): string | undefined {
+  if (!rawCity) return undefined;
+  const trimmed = rawCity.trim().toLowerCase();
+  if (!trimmed || trimmed === 'all') return 'All';
+  if (['bengaluru', 'bangalore', 'bengaluru-vtp', 'bengaluru vtp'].includes(trimmed)) return 'Bengaluru';
+  if (['hyderabad', 'secunderabad', 'cyberabad'].includes(trimmed)) return 'Hyderabad';
+  if (['pune', 'poona'].includes(trimmed)) return 'Pune';
+  if (['delhi-ncr', 'delhi', 'new delhi', 'gurgaon', 'gurugram', 'noida', 'greater noida', 'faridabad', 'ghaziabad', 'ncr'].includes(trimmed)) return 'Delhi-NCR';
+  if (['mumbai', 'bombay', 'navi mumbai', 'thane'].includes(trimmed)) return 'Mumbai';
+  if (['chennai', 'madras'].includes(trimmed)) return 'Chennai';
+  return rawCity; // Pass raw value so Zod enum will reject unrecognized cities with 400 VALIDATION_ERROR
+}
+
+router.get('/india', async (req: Request, res: Response) => {
+  try {
+    const normalizedQuery: any = {};
+    for (const [key, value] of Object.entries(req.query)) {
+      normalizedQuery[key] = Array.isArray(value) ? value[0] : value;
+    }
+
+    if (normalizedQuery.city) {
+      normalizedQuery.city = normalizeCityQuery(normalizedQuery.city);
+    }
+
+    const parsed = indiaListQuerySchema.safeParse(normalizedQuery);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid query parameters',
+          details: parsed.error.format(),
+        },
+      });
+      return;
+    }
+
+    const {
+      city,
+      workMode,
+      stage,
+      search,
+      skill,
+      matchFilter,
+      sort,
+      page = 1,
+      limit = 20,
+    } = parsed.data;
+
+    // Resolve optional candidate authentication
+    let userId: string | null = (req as any).userId || null;
+    if (!userId) {
+      try {
+        const auth = getAuth(req);
+        if (auth && auth.userId) {
+          const user = await prisma.user.findUnique({
+            where: { clerkId: auth.userId },
+            select: { id: true },
+          });
+          if (user) {
+            userId = user.id;
+          }
+        }
+      } catch {
+        // Optional auth failure should not block public browsing
+      }
+    }
+
+    const matchingService = new MatchingService(prisma);
+    const evidenceMap = userId ? await matchingService.buildCandidateEvidenceMapByUserId(userId) : null;
+
+    // Build SQL conditions for strict India eligibility & filtering
+    const sqlConditions: Prisma.Sql[] = [];
+
+    // 1. Overseas exclusion (strictly disqualify non-India jobs)
+    // Exclude overseas jurisdictions unless explicit India co-location is present in location header
+    sqlConditions.push(Prisma.sql`NOT (
+      COALESCE("location", '') ~* '\\y(United States|USA|U\\.S\\.A\\.|U\\.S\\.|US|United Kingdom|UK|U\\.K\\.|Great Britain|England|EMEA|LATAM|Europe|Americas|California|New York|San Francisco|London|Canada|Toronto|Vancouver|Seattle|Austin|Chicago|Boston|Berlin|Munich|Germany|France|Paris|Amsterdam|Netherlands|Dublin|Ireland|Singapore|Sydney|Melbourne|Australia|Tokyo|Japan|Warsaw|Poland|Brazil|Mexico|Spain|Madrid|Barcelona|Switzerland|Zurich|Israel|Tel Aviv|Belgrade|Serbia)\\y'
+      AND NOT COALESCE("location", '') ~* '\\y(India)\\y'
+    )`);
+
+    // Exclude overseas residency, citizenship, clearance, and right-to-work clauses
+    sqlConditions.push(Prisma.sql`NOT (
+      COALESCE("description", '') ~* '\\y(us only|u\\.s\\. only|usa only|united states only|uk only|canada only|emea only|americas only|europe only|latam only|australia only|must reside in the (?:us|united states|uk|canada|eu|europe)|authorized to work in the (?:us|united states|uk|canada|eu)|us citizenship required|security clearance required|active ts/sci|right to work in the (?:uk|eu|united states))\\y'
+    )`);
+
+    // Exclude bare unanchored remote or unknown locations unless title specifies confirmed India hub
+    sqlConditions.push(Prisma.sql`NOT (
+      COALESCE("location", '') ~* '^(\\s*remote|\\s*unknown|\\s*telecommute)\\s*$'
+      AND NOT COALESCE("title", '') ~* '\\y(India|Bengaluru|Bangalore|Hyderabad|Pune|Delhi|Gurgaon|Gurugram|Noida|Mumbai|Chennai)\\y'
+    )`);
+
+    // 2. City Filter Condition
+    if (city && city !== 'All') {
+      if (city === 'Bengaluru') {
+        sqlConditions.push(Prisma.sql`(COALESCE("location", '') ~* '\\y(Bengaluru|Bangalore|Bengaluru-VTP)\\y' OR COALESCE("title", '') ~* '\\y(Bengaluru|Bangalore)\\y')`);
+      } else if (city === 'Hyderabad') {
+        sqlConditions.push(Prisma.sql`(COALESCE("location", '') ~* '\\y(Hyderabad|Secunderabad|Cyberabad)\\y' OR COALESCE("title", '') ~* '\\y(Hyderabad|Secunderabad|Cyberabad)\\y')`);
+      } else if (city === 'Pune') {
+        sqlConditions.push(Prisma.sql`(COALESCE("location", '') ~* '\\y(Pune|Poona)\\y' OR COALESCE("title", '') ~* '\\y(Pune|Poona)\\y')`);
+      } else if (city === 'Delhi-NCR') {
+        sqlConditions.push(Prisma.sql`(COALESCE("location", '') ~* '\\y(Delhi|New Delhi|Gurgaon|Gurugram|Noida|Greater Noida|Faridabad|Ghaziabad)\\y' OR COALESCE("title", '') ~* '\\y(Delhi|New Delhi|Gurgaon|Gurugram|Noida)\\y')`);
+      } else if (city === 'Mumbai') {
+        sqlConditions.push(Prisma.sql`(COALESCE("location", '') ~* '\\y(Mumbai|Bombay|Navi Mumbai|Thane)\\y' OR COALESCE("title", '') ~* '\\y(Mumbai|Bombay|Navi Mumbai|Thane)\\y')`);
+      } else if (city === 'Chennai') {
+        sqlConditions.push(Prisma.sql`(COALESCE("location", '') ~* '\\y(Chennai|Madras)\\y' OR COALESCE("title", '') ~* '\\y(Chennai|Madras)\\y')`);
+      }
+    } else {
+      // General India Inclusion (must possess confirmed Indian city, state, or verified India remote presence)
+      sqlConditions.push(Prisma.sql`(
+        COALESCE("location", '') ~* '\\y(India|Bengaluru|Bangalore|Hyderabad|Secunderabad|Cyberabad|Pune|Poona|Delhi|Gurgaon|Gurugram|Noida|Faridabad|Ghaziabad|Mumbai|Bombay|Navi Mumbai|Thane|Chennai|Madras|Kolkata|Calcutta|Ahmedabad|Gandhinagar|Kochi|Cochin|Ernakulam|Thiruvananthapuram|Trivandrum|Indore|Jaipur|Chandigarh|Mohali|Panchkula|Coimbatore|Bhubaneswar|Bhubaneshwar|Nagpur)\\y'
+        OR COALESCE("title", '') ~* '\\y(India|Bengaluru|Bangalore|Hyderabad|Pune|Delhi|Gurgaon|Gurugram|Noida|Mumbai|Chennai)\\y'
+        OR (COALESCE("location", '') ~* '\\y(Worldwide|Anywhere|Global Remote)\\y' AND COALESCE("description", '') ~* '\\y(India|Bengaluru|Bangalore|Hyderabad|Pune|Delhi|Mumbai|Chennai)\\y')
+      )`);
+    }
+
+    // 3. WorkMode Filter Condition
+    if (workMode) {
+      sqlConditions.push(Prisma.sql`"workMode" = ${workMode}::"WorkMode"`);
+    }
+
+    // 4. Stage Filter Condition
+    if (stage === 'INTERNSHIP') {
+      sqlConditions.push(Prisma.sql`("type" = 'INTERNSHIP'::"OpportunityType" OR "employmentType" = 'INTERNSHIP'::"EmploymentType")`);
+    } else if (stage === 'ENTRY') {
+      sqlConditions.push(Prisma.sql`("experienceLevel" = 'ENTRY'::"ExperienceLevel" AND "type" != 'INTERNSHIP'::"OpportunityType" AND "employmentType" != 'INTERNSHIP'::"EmploymentType")`);
+    }
+
+    // 5. Search Filter Condition (Title or Organization)
+    if (search && search.trim()) {
+      const term = search.trim();
+      sqlConditions.push(Prisma.sql`("title" ILIKE ${'%' + term + '%'} OR "organization" ILIKE ${'%' + term + '%'})`);
+    }
+
+    // 6. Skill Filter Condition
+    if (skill && skill.trim()) {
+      const skillTerm = skill.trim();
+      sqlConditions.push(Prisma.sql`EXISTS (
+        SELECT 1 FROM "OpportunitySkill" os
+        JOIN "Skill" s ON os."skillId" = s."id"
+        WHERE os."opportunityId" = "Opportunity"."id" AND s."name" ILIKE ${'%' + skillTerm + '%'}
+      )`);
+    }
+
+    const whereClause = Prisma.sql`WHERE ${Prisma.join(sqlConditions, ' AND ')}`;
+
+    const isMatchFiltered = Boolean(matchFilter);
+    const isMatchSorted = sort === 'match_desc' || sort === 'match_asc';
+
+    // Branch 1: Match score filtering or sorting
+    if (isMatchFiltered || isMatchSorted) {
+      if (!userId) {
+        res.status(401).json({
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Candidate authentication is required for match-based filtering and sorting',
+          },
+        });
+        return;
+      }
+
+      const candidateEvidenceMap = (await matchingService.buildCandidateEvidenceMapByUserId(userId)) || new Map();
+
+      const allCandidateIds = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT id FROM "Opportunity" ${whereClause}
+      `);
+
+      const ids = allCandidateIds.map((r) => r.id);
+      let opps: any[] = [];
+      if (ids.length > 0) {
+        opps = await prisma.opportunity.findMany({
+          where: { id: { in: ids } },
+          include: {
+            opportunitySkills: {
+              include: {
+                skill: true,
+              },
+            },
+          },
+        });
+      }
+
+      let scoredOpps = opps.map((opp) => {
+        const companyLogoUrl = resolveCompanyLogoUrl(opp.organization, opp.applicationUrl, opp.sourceUrl);
+        const matchResult = matchingService.matchEvidenceToOpportunity(candidateEvidenceMap, opp);
+        return {
+          ...opp,
+          companyLogoUrl,
+          match: matchingService.getMatchSummary(matchResult),
+        };
+      });
+
+      if (matchFilter) {
+        switch (matchFilter) {
+          case '80_plus':
+            scoredOpps = scoredOpps.filter(
+              (o) => o.match?.hasStructuredRequirements && o.match?.score !== null && o.match.score >= 80
+            );
+            break;
+          case '60_plus':
+            scoredOpps = scoredOpps.filter(
+              (o) => o.match?.hasStructuredRequirements && o.match?.score !== null && o.match.score >= 60
+            );
+            break;
+          case '40_plus':
+            scoredOpps = scoredOpps.filter(
+              (o) => o.match?.hasStructuredRequirements && o.match?.score !== null && o.match.score >= 40
+            );
+            break;
+          case 'below_40':
+            scoredOpps = scoredOpps.filter(
+              (o) => o.match?.hasStructuredRequirements && o.match?.score !== null && o.match.score < 40
+            );
+            break;
+          case 'unavailable':
+            scoredOpps = scoredOpps.filter(
+              (o) => !o.match?.hasStructuredRequirements || o.match?.score === null
+            );
+            break;
+        }
+      }
+
+      if (sort === 'match_desc') {
+        scoredOpps.sort((a, b) => {
+          const scoreA = a.match?.score ?? -1;
+          const scoreB = b.match?.score ?? -1;
+          if (scoreB !== scoreA) return scoreB - scoreA;
+          const dateA = a.postedDate ? new Date(a.postedDate).getTime() : 0;
+          const dateB = b.postedDate ? new Date(b.postedDate).getTime() : 0;
+          if (dateB !== dateA) return dateB - dateA;
+          return a.id.localeCompare(b.id);
+        });
+      } else if (sort === 'match_asc') {
+        scoredOpps.sort((a, b) => {
+          const scoreA = a.match?.score !== null && a.match?.score !== undefined ? a.match.score : 999;
+          const scoreB = b.match?.score !== null && b.match?.score !== undefined ? b.match.score : 999;
+          if (scoreA !== scoreB) return scoreA - scoreB;
+          const dateA = a.postedDate ? new Date(a.postedDate).getTime() : 0;
+          const dateB = b.postedDate ? new Date(b.postedDate).getTime() : 0;
+          if (dateB !== dateA) return dateB - dateA;
+          return a.id.localeCompare(b.id);
+        });
+      }
+
+      const total = scoredOpps.length;
+      let paginatedOpps = scoredOpps.slice((page - 1) * limit, page * limit);
+
+      // Apply employer interleaving only if sorting is balanced/default
+      if (!isMatchSorted && !sort) {
+        paginatedOpps = interleaveOpportunitiesByEmployer(paginatedOpps);
+      }
+
+      res.json({
+        opportunities: paginatedOpps,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+        candidateContext: userId
+          ? { isAuthenticated: true, hasSkills: (candidateEvidenceMap?.size || 0) > 0 }
+          : { isAuthenticated: false, hasSkills: false },
+        filters: {
+          city: city || 'All',
+          workMode: workMode || 'ALL',
+          stage: stage || 'ALL',
+        },
+      });
+      return;
+    }
+
+    // Branch 2: Standard database sorting OR Balanced Employer Interleaving
+    let idRows: Array<{ id: string }> = [];
+    const countRows = await prisma.$queryRaw<Array<{ count: number }>>(Prisma.sql`
+      SELECT COUNT(*)::int as count FROM "Opportunity" ${whereClause}
+    `);
+    const total = countRows.length > 0 ? Number(countRows[0].count) : 0;
+
+    const isExplicitDateSort = sort === 'posted_asc' || sort === 'posted_desc';
+
+    if (isExplicitDateSort) {
+      if (sort === 'posted_asc') {
+        idRows = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT id FROM "Opportunity"
+          ${whereClause}
+          ORDER BY "postedDate" ASC NULLS LAST, "createdAt" ASC, id ASC
+          LIMIT ${limit} OFFSET ${(page - 1) * limit}
+        `);
+      } else {
+        idRows = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT id FROM "Opportunity"
+          ${whereClause}
+          ORDER BY "postedDate" DESC NULLS LAST, "createdAt" DESC, id ASC
+          LIMIT ${limit} OFFSET ${(page - 1) * limit}
+        `);
+      }
+    } else {
+      // Default: Balanced Employer Round-Robin Interleaving
+      idRows = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT id FROM (
+          SELECT id,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY LOWER(TRIM("organization"))
+                   ORDER BY "postedDate" DESC NULLS LAST, "createdAt" DESC, id ASC
+                 ) as employer_rank,
+                 LOWER(TRIM("organization")) as employer_key
+          FROM "Opportunity"
+          ${whereClause}
+        ) ranked
+        ORDER BY employer_rank ASC, employer_key ASC, id ASC
+        LIMIT ${limit} OFFSET ${(page - 1) * limit}
+      `);
+    }
+
+    const ids = idRows.map((r) => r.id);
+    let opportunities: any[] = [];
+    if (ids.length > 0) {
+      const opps = await prisma.opportunity.findMany({
+        where: { id: { in: ids } },
+        include: {
+          opportunitySkills: {
+            include: {
+              skill: true,
+            },
+          },
+        },
+      });
+      const idMap = new Map(opps.map((o) => [o.id, o]));
+      opportunities = ids.map((id) => idMap.get(id)).filter(Boolean);
+    }
+
+    // Apply balanced employer interleaving across the page items when not explicitly sorted
+    if (!isExplicitDateSort) {
+      opportunities = interleaveOpportunitiesByEmployer(opportunities);
+    }
+
+    const enrichedOpportunities = opportunities.map((opp) => {
+      const companyLogoUrl = resolveCompanyLogoUrl(opp.organization, opp.applicationUrl, opp.sourceUrl);
+      if (evidenceMap) {
+        const matchResult = matchingService.matchEvidenceToOpportunity(evidenceMap, opp);
+        return {
+          ...opp,
+          companyLogoUrl,
+          match: matchingService.getMatchSummary(matchResult),
+        };
+      }
+      return {
+        ...opp,
+        companyLogoUrl,
+        match: null,
+      };
+    });
+
+    res.json({
+      opportunities: enrichedOpportunities,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      candidateContext: userId
+        ? { isAuthenticated: true, hasSkills: (evidenceMap?.size || 0) > 0 }
+        : { isAuthenticated: false, hasSkills: false },
+      filters: {
+        city: city || 'All',
+        workMode: workMode || 'ALL',
+        stage: stage || 'ALL',
+      },
+    });
+  } catch (error) {
+    console.error('Get India opportunities error:', error);
     res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
   }
 });

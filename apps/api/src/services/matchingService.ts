@@ -1,4 +1,5 @@
 import { PrismaClient, RequirementType } from '@prisma/client';
+import { normalizeSkillName } from './skillNormalizer';
 
 export interface SkillEvidence {
   skillId: string;
@@ -61,6 +62,7 @@ export class MatchingService {
 
   /**
    * Helper to build evidence map from candidate profile data.
+   * Maps evidence by both raw skillId UUID and canonical normalized skill name.
    */
   buildEvidenceMapFromProfile(profile: {
     candidateSkills: Array<{ skillId: string; skill: { name: string } }>;
@@ -72,35 +74,48 @@ export class MatchingService {
   }): Map<string, SkillEvidence[]> {
     const evidenceMap = new Map<string, SkillEvidence[]>();
 
+    const addEvidence = (key: string, ev: SkillEvidence) => {
+      if (!evidenceMap.has(key)) {
+        evidenceMap.set(key, []);
+      }
+      evidenceMap.get(key)!.push(ev);
+    };
+
     for (const candidateSkill of profile.candidateSkills) {
       const skillId = candidateSkill.skillId;
+      const skillName = candidateSkill.skill.name;
       const evidence: SkillEvidence = {
         skillId,
-        skillName: candidateSkill.skill.name,
+        skillName,
         isDirect: true,
       };
 
-      if (!evidenceMap.has(skillId)) {
-        evidenceMap.set(skillId, []);
-      }
-      evidenceMap.get(skillId)!.push(evidence);
+      // Index by raw UUID
+      addEvidence(skillId, evidence);
+
+      // Index by canonical normalized name
+      const normKey = `norm:${normalizeSkillName(skillName)}`;
+      addEvidence(normKey, evidence);
     }
 
     for (const project of profile.projects) {
       for (const projectSkill of project.projectSkills) {
         const skillId = projectSkill.skillId;
+        const skillName = projectSkill.skill.name;
         const evidence: SkillEvidence = {
           skillId,
-          skillName: projectSkill.skill.name,
+          skillName,
           isDirect: false,
           projectName: project.name,
           projectId: project.id,
         };
 
-        if (!evidenceMap.has(skillId)) {
-          evidenceMap.set(skillId, []);
-        }
-        evidenceMap.get(skillId)!.push(evidence);
+        // Index by raw UUID
+        addEvidence(skillId, evidence);
+
+        // Index by canonical normalized name
+        const normKey = `norm:${normalizeSkillName(skillName)}`;
+        addEvidence(normKey, evidence);
       }
     }
 
@@ -122,12 +137,12 @@ export class MatchingService {
   ): MatchResult {
     const oppSkills = opportunity.opportunitySkills || [];
     const requiredSkills = oppSkills
-      .filter(os => os.requirementType === RequirementType.REQUIRED)
-      .map(os => ({ skillId: os.skillId, skillName: os.skill ? os.skill.name : '' }));
+      .filter((os) => os.requirementType === RequirementType.REQUIRED)
+      .map((os) => ({ skillId: os.skillId, skillName: os.skill ? os.skill.name : '' }));
 
     const preferredSkills = oppSkills
-      .filter(os => os.requirementType === RequirementType.PREFERRED)
-      .map(os => ({ skillId: os.skillId, skillName: os.skill ? os.skill.name : '' }));
+      .filter((os) => os.requirementType === RequirementType.PREFERRED)
+      .map((os) => ({ skillId: os.skillId, skillName: os.skill ? os.skill.name : '' }));
 
     const hasStructuredRequirements = requiredSkills.length > 0 || preferredSkills.length > 0;
 
@@ -147,7 +162,9 @@ export class MatchingService {
     const requiredMissing: Array<{ skillId: string; skillName: string }> = [];
 
     for (const skill of requiredSkills) {
-      if (evidenceMap.has(skill.skillId)) {
+      const normKey = `norm:${normalizeSkillName(skill.skillName)}`;
+      const hasMatch = evidenceMap.has(skill.skillId) || (Boolean(skill.skillName) && evidenceMap.has(normKey));
+      if (hasMatch) {
         requiredMatched.push(skill);
       } else {
         requiredMissing.push(skill);
@@ -158,7 +175,9 @@ export class MatchingService {
     const preferredMissing: Array<{ skillId: string; skillName: string }> = [];
 
     for (const skill of preferredSkills) {
-      if (evidenceMap.has(skill.skillId)) {
+      const normKey = `norm:${normalizeSkillName(skill.skillName)}`;
+      const hasMatch = evidenceMap.has(skill.skillId) || (Boolean(skill.skillName) && evidenceMap.has(normKey));
+      if (hasMatch) {
         preferredMatched.push(skill);
       } else {
         preferredMissing.push(skill);
@@ -190,9 +209,9 @@ export class MatchingService {
     if (!matchResult.hasStructuredRequirements || matchResult.score === null) {
       return {
         score: null,
-        hasStructuredRequirements: false,
+        hasStructuredRequirements: matchResult.hasStructuredRequirements,
         matchedCount: 0,
-        missingCount: 0,
+        missingCount: matchResult.requiredMissing.length + matchResult.preferredMissing.length,
       };
     }
 
@@ -277,3 +296,4 @@ export class MatchingService {
     return Math.round(score * 100) / 100;
   }
 }
+

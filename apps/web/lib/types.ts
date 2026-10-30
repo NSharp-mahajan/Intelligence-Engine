@@ -103,6 +103,11 @@ export interface Opportunity {
   companyLogoUrl?: string | null;
 }
 
+export interface CandidateContext {
+  isAuthenticated: boolean;
+  hasSkills: boolean;
+}
+
 export interface OpportunitiesResponse {
   opportunities: Opportunity[];
   pagination: {
@@ -110,6 +115,12 @@ export interface OpportunitiesResponse {
     limit: number;
     total: number;
     totalPages: number;
+  };
+  candidateContext?: CandidateContext;
+  filters?: {
+    city?: string;
+    workMode?: string;
+    stage?: string;
   };
 }
 

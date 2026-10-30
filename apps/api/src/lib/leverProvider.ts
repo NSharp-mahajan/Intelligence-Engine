@@ -1,5 +1,6 @@
 import type { ExternalJob, OpportunityProvider } from './opportunityProvider';
 import { extractOpportunitySkills } from '../services/opportunitySkillExtractor';
+import { IndiaLocationClassifier } from '../services/indiaLocationClassifier';
 
 export interface LeverBoardConfig {
   site: string;
@@ -10,6 +11,11 @@ export interface LeverProviderOptions {
   boards?: LeverBoardConfig[];
   timeoutMs?: number;
   maxJobsPerBoard?: number;
+  maxScanLimit?: number;
+  pageSize?: number;
+  maxRequestsPerBoard?: number;
+  rateLimitDelayMs?: number;
+  maxRetries?: number;
 }
 
 export interface LeverCategoryData {
@@ -45,9 +51,17 @@ export interface LeverJobItem {
   openingPlain?: string;
 }
 
+export const VERIFIED_INDIA_LEVER_BOARDS: LeverBoardConfig[] = [
+  { site: 'meesho', companyName: 'Meesho' },
+  { site: 'cred', companyName: 'CRED' },
+  { site: 'spotify', companyName: 'Spotify' },
+];
+
 export const DEFAULT_LEVER_BOARDS: LeverBoardConfig[] = [
   { site: 'palantir', companyName: 'Palantir' },
   { site: 'spotify', companyName: 'Spotify' },
+  { site: 'meesho', companyName: 'Meesho' },
+  { site: 'cred', companyName: 'CRED' },
 ];
 
 /**
@@ -88,16 +102,31 @@ export class LeverProvider implements OpportunityProvider {
   private readonly boards: LeverBoardConfig[];
   private readonly timeoutMs: number;
   private readonly maxJobsPerBoard?: number;
+  private readonly maxScanLimit: number;
+  private readonly pageSize: number;
+  private readonly maxRequestsPerBoard: number;
+  private readonly rateLimitDelayMs: number;
+  private readonly maxRetries: number;
 
   constructor(options?: LeverProviderOptions | LeverBoardConfig[]) {
     if (Array.isArray(options)) {
       this.boards = options.length > 0 ? options : DEFAULT_LEVER_BOARDS;
       this.timeoutMs = 30000;
       this.maxJobsPerBoard = 25;
+      this.maxScanLimit = 500;
+      this.pageSize = 100;
+      this.maxRequestsPerBoard = 10;
+      this.rateLimitDelayMs = 150;
+      this.maxRetries = 2;
     } else {
       this.boards = options?.boards && options.boards.length > 0 ? options.boards : DEFAULT_LEVER_BOARDS;
       this.timeoutMs = options?.timeoutMs ?? 30000;
       this.maxJobsPerBoard = options?.maxJobsPerBoard !== undefined ? options.maxJobsPerBoard : 25;
+      this.maxScanLimit = options?.maxScanLimit !== undefined ? options.maxScanLimit : 500;
+      this.pageSize = Math.min(Math.max(options?.pageSize ?? 100, 1), 100);
+      this.maxRequestsPerBoard = options?.maxRequestsPerBoard !== undefined ? options.maxRequestsPerBoard : 10;
+      this.rateLimitDelayMs = options?.rateLimitDelayMs !== undefined ? options.rateLimitDelayMs : 150;
+      this.maxRetries = options?.maxRetries !== undefined ? options.maxRetries : 2;
     }
   }
 
@@ -124,38 +153,162 @@ export class LeverProvider implements OpportunityProvider {
   }
 
   /**
-   * Fetches and transforms jobs for a single Lever site.
+   * Fetches a single page of postings from the Lever API with retry and backoff.
+   */
+  protected async fetchPage(
+    site: string,
+    limit: number,
+    skip: number,
+  ): Promise<LeverJobItem[]> {
+    const url = `https://api.lever.co/v0/postings/${encodeURIComponent(site)}?mode=json&limit=${encodeURIComponent(limit)}&skip=${encodeURIComponent(skip)}`;
+
+    let attempts = 0;
+    const maxAttempts = 1 + this.maxRetries;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Career-Intelligence-Engine/1.0',
+          },
+          signal: AbortSignal.timeout(this.timeoutMs),
+        });
+
+        if (response.status === 429) {
+          if (attempts < maxAttempts) {
+            const retryAfterHeader = response.headers.get('Retry-After');
+            const retryAfterSec = retryAfterHeader ? parseInt(retryAfterHeader, 10) : NaN;
+            const delayMs = !isNaN(retryAfterSec) && retryAfterSec > 0
+              ? retryAfterSec * 1000
+              : 1000 * Math.pow(2, attempts - 1);
+            console.warn(`[LeverProvider] Rate limited (429) on "${site}" (skip=${skip}). Retrying in ${delayMs}ms (attempt ${attempts}/${maxAttempts})...`);
+            await new Promise((r) => setTimeout(r, delayMs));
+            continue;
+          }
+          throw new Error(`Lever API rate limit (429) exceeded for "${site}" after ${attempts} attempts`);
+        }
+
+        if (!response.ok) {
+          if (response.status >= 500 && attempts < maxAttempts) {
+            const delayMs = 1000 * Math.pow(2, attempts - 1);
+            console.warn(`[LeverProvider] Server error (${response.status}) on "${site}" (skip=${skip}). Retrying in ${delayMs}ms...`);
+            await new Promise((r) => setTimeout(r, delayMs));
+            continue;
+          }
+          throw new Error(`Lever API error for "${site}": ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        if (!Array.isArray(data)) {
+          console.warn(`[LeverProvider] Board "${site}" returned non-array payload at skip=${skip}.`);
+          return [];
+        }
+
+        return data as LeverJobItem[];
+      } catch (error) {
+        if (attempts >= maxAttempts) {
+          throw error;
+        }
+        const delayMs = 1000 * Math.pow(2, attempts - 1);
+        console.warn(`[LeverProvider] Request error for "${site}" (skip=${skip}): ${error instanceof Error ? error.message : error}. Retrying in ${delayMs}ms...`);
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+
+    return [];
+  }
+
+  /**
+   * Fetches and transforms jobs for a single Lever site using bounded pagination.
+   *
+   * Lever supports offset pagination via &limit and &skip.
+   * To prevent global employers with deep India listings from missing eligible roles:
+   * 1. Iterates pages with bounded requests (maxRequestsPerBoard) and scan limit (maxScanLimit).
+   * 2. Inspects and identifies India-eligible postings across all scanned pages.
+   * 3. Early-terminates if India-eligible quota satisfies maxJobsPerBoard or end of listings is reached.
+   * 4. Retains discovered India jobs first, then non-India jobs up to maxJobsPerBoard.
    */
   async fetchBoard(board: LeverBoardConfig): Promise<ExternalJob[]> {
-    const limitQuery = this.maxJobsPerBoard && this.maxJobsPerBoard > 0
-      ? `&limit=${encodeURIComponent(this.maxJobsPerBoard)}`
-      : '';
-    const url = `https://api.lever.co/v0/postings/${encodeURIComponent(board.site)}?mode=json${limitQuery}`;
+    let skip = 0;
+    let requestCount = 0;
+    const scannedIndiaJobs: LeverJobItem[] = [];
+    const scannedOtherJobs: LeverJobItem[] = [];
+    let hasMore = true;
 
-    const response = await fetch(url, {
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Career-Intelligence-Engine/1.0',
-      },
-      signal: AbortSignal.timeout(this.timeoutMs),
-    });
+    while (
+      hasMore &&
+      requestCount < this.maxRequestsPerBoard &&
+      (scannedIndiaJobs.length + scannedOtherJobs.length) < this.maxScanLimit
+    ) {
+      const remainingScanCapacity = this.maxScanLimit - (scannedIndiaJobs.length + scannedOtherJobs.length);
+      const batchLimit = Math.min(this.pageSize, remainingScanCapacity);
+      if (batchLimit <= 0) break;
 
-    if (!response.ok) {
-      throw new Error(`Lever API error for "${board.site}": ${response.status} ${response.statusText}`);
+      let batch: LeverJobItem[];
+      try {
+        batch = await this.fetchPage(board.site, batchLimit, skip);
+        requestCount++;
+      } catch (err) {
+        if (scannedIndiaJobs.length + scannedOtherJobs.length > 0) {
+          console.warn(
+            `[LeverProvider] Error fetching page at skip=${skip} for "${board.site}": ${err instanceof Error ? err.message : err}. Continuing with ${scannedIndiaJobs.length + scannedOtherJobs.length} scanned jobs.`,
+          );
+          break;
+        }
+        throw err;
+      }
+
+      if (!Array.isArray(batch) || batch.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      for (const job of batch) {
+        let locationStr: string | undefined = job.categories?.location?.trim() || undefined;
+        if (!locationStr && Array.isArray(job.categories?.allLocations) && job.categories.allLocations.length > 0) {
+          locationStr = job.categories.allLocations[0]?.trim() || undefined;
+        }
+        const fullDesc = buildLeverFullDescription(job);
+        const classification = IndiaLocationClassifier.classify(locationStr, job.text || '', fullDesc);
+
+        if (classification.isIndiaEligible) {
+          scannedIndiaJobs.push(job);
+        } else {
+          scannedOtherJobs.push(job);
+        }
+      }
+
+      // If the batch returned fewer than requested, we reached the end of the ATS board
+      if (batch.length < batchLimit) {
+        hasMore = false;
+        break;
+      }
+
+      // Early termination: if maxJobsPerBoard is set and we already collected enough India jobs
+      if (this.maxJobsPerBoard !== undefined && this.maxJobsPerBoard > 0 && scannedIndiaJobs.length >= this.maxJobsPerBoard) {
+        break;
+      }
+
+      skip += batch.length;
+
+      // Polite rate-limit delay between paginated requests
+      if (hasMore && this.rateLimitDelayMs > 0 && requestCount < this.maxRequestsPerBoard) {
+        await new Promise((r) => setTimeout(r, this.rateLimitDelayMs));
+      }
     }
 
-    const data = await response.json();
-    if (!Array.isArray(data)) {
-      console.warn(`[LeverProvider] Board "${board.site}" returned non-array payload.`);
-      return [];
+    if (this.maxJobsPerBoard === undefined || this.maxJobsPerBoard <= 0) {
+      return [...scannedIndiaJobs, ...scannedOtherJobs].map((job) => this.transformLeverJob(job, board));
     }
 
-    let jobsList: LeverJobItem[] = data as LeverJobItem[];
-    if (this.maxJobsPerBoard !== undefined && this.maxJobsPerBoard > 0) {
-      jobsList = jobsList.slice(0, this.maxJobsPerBoard);
-    }
+    const selectedIndia = scannedIndiaJobs.slice(0, this.maxJobsPerBoard);
+    const remainingSlots = this.maxJobsPerBoard - selectedIndia.length;
+    const selectedOther = remainingSlots > 0 ? scannedOtherJobs.slice(0, remainingSlots) : [];
 
-    return jobsList.map((job) => this.transformLeverJob(job, board));
+    const retainedJobs = [...selectedIndia, ...selectedOther];
+    return retainedJobs.map((job) => this.transformLeverJob(job, board));
   }
 
   /**

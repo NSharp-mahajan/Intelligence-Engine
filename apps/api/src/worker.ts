@@ -20,7 +20,8 @@ OPTIONS:
   --providers=<list>      Comma-separated list of providers to run (e.g. --providers=jobicy,lever).
                           Overrides INGESTION_PROVIDERS environment variable.
   --interval=<minutes>    Override scheduled interval in minutes for daemon mode.
-  --limit=<count>         Maximum jobs per board for Greenhouse / Lever (default: 25).
+  --limit=<count>         Maximum jobs retained per board for Greenhouse / Lever (default: 25).
+  --scan-limit=<count>    Maximum raw records scanned per board (default: 500).
   --no-immediate          When starting in daemon mode, wait for the first interval instead of running immediately.
   --help, -h              Display this help message.
 
@@ -87,12 +88,21 @@ async function main() {
     if (!isNaN(parsed) && parsed > 0) limitOverride = parsed;
   }
 
+  // Parse optional --scan-limit override
+  let scanLimitOverride: number | undefined;
+  const scanLimitArg = args.find((a) => a.startsWith('--scan-limit=') || a.startsWith('--max-scan='));
+  if (scanLimitArg) {
+    const parsed = parseInt(scanLimitArg.split('=')[1], 10);
+    if (!isNaN(parsed) && parsed > 0) scanLimitOverride = parsed;
+  }
+
   const baseConfig = loadIngestionConfigFromEnv();
   const config = {
     ...baseConfig,
     ...(providerOverride ? { providers: providerOverride } : {}),
     ...(intervalOverride ? { intervalMinutes: intervalOverride } : {}),
     ...(limitOverride !== undefined ? { maxJobsPerBoard: limitOverride } : {}),
+    ...(scanLimitOverride !== undefined ? { maxScanLimit: scanLimitOverride } : {}),
   };
 
   const scheduler = new IngestionScheduler(prisma, config, defaultProviderFactory);

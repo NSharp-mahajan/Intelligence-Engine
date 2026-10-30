@@ -40,8 +40,10 @@ export interface IngestionConfig {
   timeoutMs: number;
   /** Number of jobs requested for Jobicy (default: 50) */
   jobicyCount: number;
-  /** Optional max jobs per board for Greenhouse / Lever pilot runs */
+  /** Optional max jobs per board for Greenhouse / Lever pilot runs (records retained) */
   maxJobsPerBoard?: number;
+  /** Optional max scan limit per board for Greenhouse / Lever pagination scanning (default: 500) */
+  maxScanLimit?: number;
   /** Optional Greenhouse board configurations */
   greenhouseBoards?: GreenhouseBoardConfig[];
   /** Optional Lever board configurations */
@@ -131,6 +133,10 @@ export function loadIngestionConfigFromEnv(): IngestionConfig {
     ? parseInt(process.env.INGESTION_MAX_JOBS_PER_BOARD, 10)
     : 25;
 
+  const maxScanLimit = process.env.INGESTION_MAX_SCAN_LIMIT
+    ? parseInt(process.env.INGESTION_MAX_SCAN_LIMIT, 10)
+    : 500;
+
   return {
     providers: envProviders,
     intervalMinutes: isNaN(intervalMinutes) || intervalMinutes < 1 ? 360 : intervalMinutes,
@@ -140,6 +146,7 @@ export function loadIngestionConfigFromEnv(): IngestionConfig {
     timeoutMs: isNaN(timeoutMs) || timeoutMs < 1000 ? 30000 : timeoutMs,
     jobicyCount: isNaN(jobicyCount) || jobicyCount < 1 ? 50 : jobicyCount,
     maxJobsPerBoard: maxJobsPerBoard && !isNaN(maxJobsPerBoard) ? maxJobsPerBoard : 25,
+    maxScanLimit: maxScanLimit && !isNaN(maxScanLimit) ? maxScanLimit : 500,
     greenhouseBoards: parseGreenhouseBoardsFromEnv(process.env.GREENHOUSE_BOARDS),
     leverBoards: parseLeverBoardsFromEnv(process.env.LEVER_BOARDS),
   };
@@ -155,12 +162,14 @@ export const defaultProviderFactory: ProviderFactory = (name: string, config: In
       return new GreenhouseProvider({
         boards: config.greenhouseBoards && config.greenhouseBoards.length > 0 ? config.greenhouseBoards : DEFAULT_GREENHOUSE_BOARDS,
         maxJobsPerBoard: config.maxJobsPerBoard,
+        maxScanLimit: config.maxScanLimit,
         timeoutMs: config.timeoutMs,
       });
     case 'lever':
       return new LeverProvider({
         boards: config.leverBoards && config.leverBoards.length > 0 ? config.leverBoards : DEFAULT_LEVER_BOARDS,
         maxJobsPerBoard: config.maxJobsPerBoard,
+        maxScanLimit: config.maxScanLimit,
         timeoutMs: config.timeoutMs,
       });
     default:

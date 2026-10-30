@@ -1,5 +1,6 @@
 import type { ExternalJob, OpportunityProvider } from './opportunityProvider';
 import { extractOpportunitySkills } from '../services/opportunitySkillExtractor';
+import { IndiaLocationClassifier } from '../services/indiaLocationClassifier';
 
 export interface GreenhouseBoardConfig {
   boardToken: string;
@@ -10,6 +11,7 @@ export interface GreenhouseProviderOptions {
   boards?: GreenhouseBoardConfig[];
   timeoutMs?: number;
   maxJobsPerBoard?: number;
+  maxScanLimit?: number;
 }
 
 export interface GreenhouseDepartment {
@@ -54,9 +56,32 @@ export interface GreenhouseApiResponse {
   };
 }
 
+export const VERIFIED_INDIA_GREENHOUSE_BOARDS: GreenhouseBoardConfig[] = [
+  { boardToken: 'databricks', companyName: 'Databricks' },
+  { boardToken: 'okta', companyName: 'Okta' },
+  { boardToken: 'stripe', companyName: 'Stripe' },
+  { boardToken: 'inmobi', companyName: 'InMobi' },
+  { boardToken: 'rubrik', companyName: 'Rubrik' },
+  { boardToken: 'mongodb', companyName: 'MongoDB' },
+  { boardToken: 'elastic', companyName: 'Elastic' },
+  { boardToken: 'druva', companyName: 'Druva' },
+  { boardToken: 'groww', companyName: 'Groww' },
+  { boardToken: 'coinbase', companyName: 'Coinbase' },
+  { boardToken: 'cloudflare', companyName: 'Cloudflare' },
+];
+
 export const DEFAULT_GREENHOUSE_BOARDS: GreenhouseBoardConfig[] = [
   { boardToken: 'cloudflare', companyName: 'Cloudflare' },
   { boardToken: 'databricks', companyName: 'Databricks' },
+  { boardToken: 'okta', companyName: 'Okta' },
+  { boardToken: 'stripe', companyName: 'Stripe' },
+  { boardToken: 'inmobi', companyName: 'InMobi' },
+  { boardToken: 'rubrik', companyName: 'Rubrik' },
+  { boardToken: 'mongodb', companyName: 'MongoDB' },
+  { boardToken: 'elastic', companyName: 'Elastic' },
+  { boardToken: 'druva', companyName: 'Druva' },
+  { boardToken: 'groww', companyName: 'Groww' },
+  { boardToken: 'coinbase', companyName: 'Coinbase' },
 ];
 
 /**
@@ -79,16 +104,19 @@ export class GreenhouseProvider implements OpportunityProvider {
   private readonly boards: GreenhouseBoardConfig[];
   private readonly timeoutMs: number;
   private readonly maxJobsPerBoard?: number;
+  private readonly maxScanLimit: number;
 
   constructor(options?: GreenhouseProviderOptions | GreenhouseBoardConfig[]) {
     if (Array.isArray(options)) {
       this.boards = options.length > 0 ? options : DEFAULT_GREENHOUSE_BOARDS;
       this.timeoutMs = 30000;
       this.maxJobsPerBoard = 25;
+      this.maxScanLimit = 500;
     } else {
       this.boards = options?.boards && options.boards.length > 0 ? options.boards : DEFAULT_GREENHOUSE_BOARDS;
       this.timeoutMs = options?.timeoutMs ?? 30000;
       this.maxJobsPerBoard = options?.maxJobsPerBoard !== undefined ? options.maxJobsPerBoard : 25;
+      this.maxScanLimit = options?.maxScanLimit !== undefined ? options.maxScanLimit : 500;
     }
   }
 
@@ -116,6 +144,14 @@ export class GreenhouseProvider implements OpportunityProvider {
 
   /**
    * Fetches and transforms jobs for a single Greenhouse board.
+   *
+   * The public Greenhouse Job Board API returns all active jobs for a board in a single payload.
+   * To prevent global employers (with hundreds of overseas listings ahead of India listings)
+   * from missing India-eligible roles under a bounded retention limit, this method:
+   * 1. Inspects raw listings up to bounded scan limit (maxScanLimit, default 500).
+   * 2. Retains all India-eligible jobs discovered within that scanned window.
+   * 3. Retains non-India jobs up to the remaining quota of maxJobsPerBoard, preserving
+   *    the shared Opportunity table contract without truncation bias.
    */
   async fetchBoard(board: GreenhouseBoardConfig): Promise<ExternalJob[]> {
     const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board.boardToken)}/jobs?content=true`;
@@ -138,12 +174,41 @@ export class GreenhouseProvider implements OpportunityProvider {
       return [];
     }
 
-    let jobsList = data.jobs;
-    if (this.maxJobsPerBoard !== undefined && this.maxJobsPerBoard > 0) {
-      jobsList = jobsList.slice(0, this.maxJobsPerBoard);
+    const scanLimit = this.maxScanLimit > 0 ? Math.min(data.jobs.length, this.maxScanLimit) : data.jobs.length;
+    const scannedJobs = data.jobs.slice(0, scanLimit);
+
+    if (this.maxJobsPerBoard === undefined || this.maxJobsPerBoard <= 0 || scannedJobs.length <= this.maxJobsPerBoard) {
+      return scannedJobs.map((job) => this.transformGreenhouseJob(job, board));
     }
 
-    return jobsList.map((job) => this.transformGreenhouseJob(job, board));
+    // Partition scanned jobs into India-eligible vs other listings
+    const indiaJobs: GreenhouseJobItem[] = [];
+    const otherJobs: GreenhouseJobItem[] = [];
+
+    for (const job of scannedJobs) {
+      let locationStr = job.location?.name?.trim() || undefined;
+      if (!locationStr && Array.isArray(job.offices) && job.offices.length > 0) {
+        locationStr = job.offices[0].location?.trim() || job.offices[0].name?.trim() || undefined;
+      }
+      const rawContent = typeof job.content === 'string' ? job.content : '';
+      const cleanDesc = decodeHtmlEntities(rawContent);
+
+      const classification = IndiaLocationClassifier.classify(locationStr, job.title || '', cleanDesc);
+      if (classification.isIndiaEligible) {
+        indiaJobs.push(job);
+      } else {
+        otherJobs.push(job);
+      }
+    }
+
+    // Retain India jobs first, then fill remaining capacity with other jobs up to maxJobsPerBoard
+    const retained: GreenhouseJobItem[] = [...indiaJobs];
+    const remainingQuota = Math.max(0, this.maxJobsPerBoard - retained.length);
+    if (remainingQuota > 0) {
+      retained.push(...otherJobs.slice(0, remainingQuota));
+    }
+
+    return retained.map((job) => this.transformGreenhouseJob(job, board));
   }
 
   /**

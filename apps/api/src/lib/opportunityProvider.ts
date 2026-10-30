@@ -84,6 +84,8 @@ export interface OpportunityProvider {
 export * from './jobicyProvider';
 export * from './greenhouseProvider';
 export * from './leverProvider';
+export * from '../services/indiaLocationClassifier';
+import { IndiaLocationClassifier } from '../services/indiaLocationClassifier';
 
 export class OpportunityNormalizer {
   private skillNormalizationMap: Map<string, string> = new Map([
@@ -166,8 +168,17 @@ export class OpportunityNormalizer {
     return WorkMode.UNKNOWN;
   }
 
-  normalizeEmploymentType(employmentType?: string): EmploymentTypeValue {
-    if (!employmentType) return EmploymentType.UNKNOWN;
+  normalizeEmploymentType(employmentType?: string, title?: string): EmploymentTypeValue {
+    const rawTitle = (title || '').toLowerCase();
+    if (/\b(intern|internship|industrial trainee|summer intern|co-op)\b/i.test(rawTitle)) {
+      return EmploymentType.INTERNSHIP;
+    }
+    if (!employmentType) {
+      if (/\b(graduate engineer trainee|graduate engineer|associate engineer|sde[- ]?1|sde[- ]?i)\b/i.test(rawTitle)) {
+        return EmploymentType.FULL_TIME;
+      }
+      return EmploymentType.UNKNOWN;
+    }
     const normalized = employmentType.toLowerCase();
     if (normalized.includes('full') && normalized.includes('time')) return EmploymentType.FULL_TIME;
     if (normalized.includes('part') && normalized.includes('time')) return EmploymentType.PART_TIME;
@@ -176,17 +187,93 @@ export class OpportunityNormalizer {
     return EmploymentType.UNKNOWN;
   }
 
-  normalizeExperienceLevel(experienceLevel?: string): ExperienceLevelValue {
-    if (!experienceLevel) return ExperienceLevel.UNKNOWN;
-    const normalized = experienceLevel.toLowerCase();
-    if (normalized.includes('entry') || normalized.includes('junior') && !normalized.includes('mid')) return ExperienceLevel.ENTRY;
-    if (normalized.includes('junior')) return ExperienceLevel.JUNIOR;
-    if (normalized.includes('mid') || normalized.includes('middle')) return ExperienceLevel.MID;
-    if (normalized.includes('senior') || normalized.includes('lead') || normalized.includes('staff')) return ExperienceLevel.SENIOR;
+  normalizeExperienceLevel(
+    experienceLevel?: string,
+    title?: string,
+    description?: string,
+  ): ExperienceLevelValue {
+    const rawExp = (experienceLevel || '').toLowerCase().trim();
+    const rawTitle = (title || '').toLowerCase().trim();
+    const rawDesc = (description || '').toLowerCase();
+
+    // ─── Rule 1: Explicit Seniority in Title ─────────────────────────────────
+    // Senior keywords strictly take precedence over lower-tier keywords (e.g. "Senior Associate", "Lead Analyst")
+    if (
+      /\b(senior|sr\.?|staff|lead|principal|architect|director|vp|vice president|head of|engineering manager|engineering lead)\b/i.test(rawTitle) ||
+      /\b(sde[- ]?3|sde[- ]?iii|mts[- ]?3|mts[- ]?iii|software engineer[- ]?3|software engineer[- ]?iii)\b/i.test(rawTitle)
+    ) {
+      if (!/\b(industrial trainee|intern)\b/i.test(rawTitle)) {
+        return ExperienceLevel.SENIOR;
+      }
+    }
+
+    // ─── Rule 2: Explicit Experience Level Input Parameter ───────────────────
+    if (rawExp) {
+      if (rawExp.includes('senior') || rawExp.includes('lead') || rawExp.includes('staff')) {
+        return ExperienceLevel.SENIOR;
+      }
+      if (rawExp.includes('mid') || rawExp.includes('middle') || rawExp.includes('intermediate')) {
+        return ExperienceLevel.MID;
+      }
+      if (rawExp.includes('entry') || rawExp.includes('junior')) {
+        return rawExp.includes('junior') ? ExperienceLevel.JUNIOR : ExperienceLevel.ENTRY;
+      }
+    }
+
+    // ─── Rule 3: Explicit Years of Experience in Description ─────────────────
+    if (
+      /\b(?:minimum of\s+)?(?:5\+|6\+|7\+|8\+|9\+|10\+|[5-9]\s*[-–]\s*\d+)\s*(?:years?|yrs?)\b/i.test(rawDesc) ||
+      /\b(?:5|6|7|8|9|10)\+?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:(?:production|work|relevant|hands-on|industry|software)\s+)?experience\b/i.test(rawDesc)
+    ) {
+      return ExperienceLevel.SENIOR;
+    }
+
+    if (
+      /\b(?:[2-4]\s*[-–]\s*[4-6]|3\+|4\+)\s*(?:years?|yrs?)\b/i.test(rawDesc) ||
+      /\b(?:2|3|4)\+?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:(?:production|work|relevant|hands-on|industry|software)\s+)?experience\b/i.test(rawDesc)
+    ) {
+      return ExperienceLevel.MID;
+    }
+
+    if (
+      /\b(?:0\s*[-–]\s*[1-2]|0\s*[-–]\s*1|1\s*[-–]\s*2|[0-1]\+|0\+)\s*(?:years?|yrs?)\b/i.test(rawDesc) ||
+      /\b(?:0|1)\+?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:(?:production|work|relevant|hands-on|industry|software)\s+)?experience\b/i.test(rawDesc)
+    ) {
+      return ExperienceLevel.ENTRY;
+    }
+
+    // ─── Rule 4: Internship / Traineeship in Title ───────────────────────────
+    if (/\b(intern|internship|industrial trainee|summer intern|co-op)\b/i.test(rawTitle)) {
+      return ExperienceLevel.ENTRY;
+    }
+
+    // ─── Rule 5: Mid-Level Technical Titles & Roman Numerals (Check before Entry) ───
+    if (
+      /\b(sde[- ]?2|sde[- ]?ii|software engineer[- ]?2|software engineer[- ]?ii|software development engineer[- ]?2|software development engineer[- ]?ii|associate tse[- ]?2|associate tse[- ]?ii|tse[- ]?2|tse[- ]?ii)\b/i.test(rawTitle) ||
+      /\b(mid[- ]level|intermediate|assistant manager)\b/i.test(rawTitle)
+    ) {
+      return ExperienceLevel.MID;
+    }
+
+    // ─── Rule 6: Entry-Level / Graduate / SDE-1 Technical Titles ─────────────
+    if (
+      /\b(sde[- ]?1|sde[- ]?i|sde[- ]?0|software engineer[- ]?1|software engineer[- ]?i|software development engineer[- ]?1|software development engineer[- ]?i)\b/i.test(rawTitle) ||
+      /\b(graduate engineer trainee|graduate engineer|graduate software engineer|graduate trainee|campus hire|university graduate|new grad|new graduate|fresher)\b/i.test(rawTitle) ||
+      /\b(associate software engineer|associate engineer|associate developer|associate technical solutions engineer|associate tse)\b/i.test(rawTitle) ||
+      /\b(entry[- ]level|junior developer|junior engineer|junior software engineer)\b/i.test(rawTitle)
+    ) {
+      return ExperienceLevel.ENTRY;
+    }
+
+    // ─── Rule 7: Conservative Fallback ───────────────────────────────────────
     return ExperienceLevel.UNKNOWN;
   }
 
-  normalizeOpportunityType(type?: string): OpportunityTypeValue {
+  normalizeOpportunityType(type?: string, title?: string): OpportunityTypeValue {
+    const rawTitle = (title || '').toLowerCase();
+    if (/\b(intern|internship|industrial trainee|summer intern|co-op)\b/i.test(rawTitle)) {
+      return OpportunityType.INTERNSHIP;
+    }
     if (!type) return OpportunityType.JOB;
     const normalized = type.toLowerCase();
     if (normalized.includes('intern')) return OpportunityType.INTERNSHIP;
@@ -198,15 +285,38 @@ export class OpportunityNormalizer {
   }
 
   normalize(job: ExternalJob): NormalizedOpportunity {
+    const rawTitle = job.title.trim();
+    const rawDesc = job.description.trim();
+
+    const indiaClassification = IndiaLocationClassifier.classify(
+      job.location,
+      rawTitle,
+      rawDesc,
+      job.workMode,
+    );
+
+    // Format location when India-eligible; otherwise preserve original location
+    const normalizedLocation = indiaClassification.isIndiaEligible
+      ? IndiaLocationClassifier.formatNormalizedLocation(indiaClassification, job.location)
+      : (job.location?.trim() || null);
+
+    // Resolve effective workMode
+    const rawWorkModeNorm = this.normalizeWorkMode(job.workMode);
+    const effectiveWorkMode = rawWorkModeNorm !== WorkMode.UNKNOWN
+      ? rawWorkModeNorm
+      : (indiaClassification.effectiveWorkMode !== 'UNKNOWN'
+          ? (indiaClassification.effectiveWorkMode as WorkModeValue)
+          : WorkMode.UNKNOWN);
+
     return {
-      title: job.title.trim(),
+      title: rawTitle,
       organization: job.company.trim(),
-      description: job.description.trim(),
-      type: this.normalizeOpportunityType(job.employmentType),
-      location: job.location?.trim() || null,
-      workMode: this.normalizeWorkMode(job.workMode),
-      employmentType: this.normalizeEmploymentType(job.employmentType),
-      experienceLevel: this.normalizeExperienceLevel(job.experienceLevel),
+      description: rawDesc,
+      type: this.normalizeOpportunityType(job.employmentType, rawTitle),
+      location: normalizedLocation,
+      workMode: effectiveWorkMode,
+      employmentType: this.normalizeEmploymentType(job.employmentType, rawTitle),
+      experienceLevel: this.normalizeExperienceLevel(job.experienceLevel, rawTitle, rawDesc),
       applicationUrl: job.applicationUrl.trim(),
       source: job.source.trim(),
       sourceUrl: job.sourceUrl?.trim() || null,

@@ -31,3 +31,6 @@ Thumbs.db
 
 # Database dumps / backups
 *.sql
+*.dump
+backups/
+*.pdf

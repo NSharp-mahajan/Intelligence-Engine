@@ -3,18 +3,23 @@
 import { useState } from 'react';
 import type React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Logo } from '../ui/Logo';
 import type { User } from '../../lib/types';
 
 interface DiscoveryWorkspaceLayoutProps {
   children: React.ReactNode;
-  user: User;
-  onSignOut: () => void;
+  user?: User | null;
+  onSignOut?: () => void;
 }
 
 export function DiscoveryWorkspaceLayout({ children, user, onSignOut }: DiscoveryWorkspaceLayoutProps) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const name = user.profile?.fullName || 'Candidate';
+  const pathname = usePathname();
+  const name = user?.profile?.fullName || 'Candidate';
+
+  const isAllOpps = pathname === '/opportunities';
+  const isIndiaOpps = pathname === '/opportunities/india';
 
   return (
     <div style={styles.layout}>
@@ -22,44 +27,63 @@ export function DiscoveryWorkspaceLayout({ children, user, onSignOut }: Discover
         <div style={styles.headerInner} className="discovery-header-inner">
           <Logo />
           <nav aria-label="Discovery navigation" style={styles.navigation} className="discovery-navigation">
-            <Link href="/opportunities" aria-current="page" style={styles.activeNavItem}>
-              Opportunities
+            <Link
+              href="/opportunities"
+              aria-current={isAllOpps ? 'page' : undefined}
+              style={isAllOpps ? styles.activeNavItem : styles.navItem}
+            >
+              All Opportunities
+            </Link>
+            <Link
+              href="/opportunities/india"
+              aria-current={isIndiaOpps ? 'page' : undefined}
+              style={isIndiaOpps ? styles.activeNavItem : styles.navItem}
+            >
+              India Opportunities
             </Link>
           </nav>
           <div style={styles.userMenuContainer}>
-            <button
-              type="button"
-              aria-expanded={isUserMenuOpen}
-              aria-haspopup="menu"
-              onClick={() => setIsUserMenuOpen((isOpen) => !isOpen)}
-              style={styles.userControl}
-            >
-              <span style={styles.avatar}>{name.charAt(0).toUpperCase()}</span>
-              <span style={styles.userName} className="discovery-user-name">{name}</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ opacity: 0.7 }}>
-                <path d="m6 9 6 6 6-6" />
-              </svg>
-            </button>
-            {isUserMenuOpen && (
-              <div role="menu" style={styles.userMenu}>
-                <div style={styles.userMenuDetails}>
-                  <span style={styles.userMenuName}>{name}</span>
-                  <span style={styles.userMenuEmail}>{user.email}</span>
-                </div>
-                <Link href="/portal" role="menuitem" style={styles.menuItem} onClick={() => setIsUserMenuOpen(false)}>
-                  Overview
-                </Link>
-                <Link href="/profile" role="menuitem" style={styles.menuItem} onClick={() => setIsUserMenuOpen(false)}>
-                  Profile
-                </Link>
-                <Link href="/evidence" role="menuitem" style={styles.menuItem} onClick={() => setIsUserMenuOpen(false)}>
-                  Skills & Evidence
-                </Link>
-                <div style={styles.menuDivider} />
-                <button type="button" role="menuitem" onClick={onSignOut} style={styles.signOutItem}>
-                  Sign Out
+            {user ? (
+              <>
+                <button
+                  type="button"
+                  aria-expanded={isUserMenuOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setIsUserMenuOpen((isOpen) => !isOpen)}
+                  style={styles.userControl}
+                >
+                  <span style={styles.avatar}>{name.charAt(0).toUpperCase()}</span>
+                  <span style={styles.userName} className="discovery-user-name">{name}</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ opacity: 0.7 }}>
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
                 </button>
-              </div>
+                {isUserMenuOpen && (
+                  <div role="menu" style={styles.userMenu}>
+                    <div style={styles.userMenuDetails}>
+                      <span style={styles.userMenuName}>{name}</span>
+                      <span style={styles.userMenuEmail}>{user.email}</span>
+                    </div>
+                    <Link href="/portal" role="menuitem" style={styles.menuItem} onClick={() => setIsUserMenuOpen(false)}>
+                      Overview
+                    </Link>
+                    <Link href="/profile" role="menuitem" style={styles.menuItem} onClick={() => setIsUserMenuOpen(false)}>
+                      Profile
+                    </Link>
+                    <Link href="/evidence" role="menuitem" style={styles.menuItem} onClick={() => setIsUserMenuOpen(false)}>
+                      Skills & Evidence
+                    </Link>
+                    <div style={styles.menuDivider} />
+                    <button type="button" role="menuitem" onClick={onSignOut} style={styles.signOutItem}>
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <Link href="/login" style={styles.signInBtn}>
+                Sign In
+              </Link>
             )}
           </div>
         </div>
@@ -98,6 +122,19 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignSelf: 'stretch',
     alignItems: 'stretch',
+    gap: '1.5rem',
+  },
+  navItem: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '0 0.5rem',
+    borderBottom: '2px solid transparent',
+    color: 'var(--text-secondary)',
+    fontSize: '0.875rem',
+    fontWeight: 500,
+    letterSpacing: '-0.01em',
+    textDecoration: 'none',
+    transition: 'color var(--transition-fast)',
   },
   activeNavItem: {
     display: 'inline-flex',
@@ -108,10 +145,23 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.875rem',
     fontWeight: 600,
     letterSpacing: '-0.01em',
+    textDecoration: 'none',
   },
   userMenuContainer: {
     position: 'relative',
     marginLeft: 'auto',
+  },
+  signInBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '0.375rem 0.875rem',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--accent-primary)',
+    color: '#ffffff',
+    fontSize: '0.8125rem',
+    fontWeight: 600,
+    textDecoration: 'none',
+    transition: 'opacity var(--transition-fast)',
   },
   userControl: {
     display: 'inline-flex',
