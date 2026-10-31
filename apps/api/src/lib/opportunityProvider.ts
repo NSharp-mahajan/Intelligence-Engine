@@ -76,14 +76,45 @@ export interface NormalizedOpportunity {
   preferredSkills: string[];
 }
 
+export interface ProviderSourceFailure {
+  source: string;
+  error: string;
+}
+
+export interface ProviderFetchStats {
+  successfulSources: string[];
+  failedSources: ProviderSourceFailure[];
+}
+
 export interface OpportunityProvider {
   name: string;
-  fetch(): Promise<ExternalJob[]>;
+  fetch(optionsOrSignal?: AbortSignal | any): Promise<ExternalJob[]>;
+  getLastFetchStats?(): ProviderFetchStats;
 }
 
 export * from './jobicyProvider';
 export * from './greenhouseProvider';
 export * from './leverProvider';
+export {
+  AshbyProvider,
+  DEFAULT_ASHBY_BOARDS,
+  VERIFIED_INDIA_ASHBY_BOARDS,
+  type AshbyBoardConfig,
+  type AshbyProviderOptions,
+  type AshbyJobItem,
+  type AshbyApiResponse,
+} from './ashbyProvider';
+export {
+  SmartRecruitersProvider,
+  DEFAULT_SMARTRECRUITERS_COMPANIES,
+  VERIFIED_INDIA_SMARTRECRUITERS_COMPANIES,
+  buildSmartRecruitersFullDescription,
+  type SmartRecruitersCompanyConfig,
+  type SmartRecruitersProviderOptions,
+  type SmartRecruitersJobItem,
+  type SmartRecruitersApiResponse,
+  type SmartRecruitersPostingDetail,
+} from './smartRecruitersProvider';
 export * from '../services/indiaLocationClassifier';
 import { IndiaLocationClassifier } from '../services/indiaLocationClassifier';
 
@@ -363,14 +394,24 @@ export class OpportunityIngestor {
     private deduplicator: OpportunityDeduplicator = new OpportunityDeduplicator(),
   ) {}
 
-  async ingest(provider: OpportunityProvider): Promise<{ created: number; updated: number; skipped: number; errors: number }> {
-    const jobs = await provider.fetch();
+  async ingest(
+    provider: OpportunityProvider,
+    signal?: AbortSignal,
+  ): Promise<{ created: number; updated: number; skipped: number; errors: number }> {
+    if (signal?.aborted) {
+      throw new Error(`Ingestion aborted for ${provider.name}: Operation cancelled`);
+    }
+
+    const jobs = await provider.fetch(signal);
     let created = 0;
     let updated = 0;
     let skipped = 0;
     let errors = 0;
 
     for (const job of jobs) {
+      if (signal?.aborted) {
+        throw new Error(`Ingestion aborted for ${provider.name}: Operation cancelled before database write`);
+      }
       try {
         const normalized = this.normalizer.normalize(job);
         const now = new Date();

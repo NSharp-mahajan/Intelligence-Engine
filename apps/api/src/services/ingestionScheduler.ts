@@ -10,6 +10,14 @@ import {
   LeverProvider,
   DEFAULT_LEVER_BOARDS,
   LeverBoardConfig,
+  AshbyProvider,
+  DEFAULT_ASHBY_BOARDS,
+  AshbyBoardConfig,
+  SmartRecruitersProvider,
+  DEFAULT_SMARTRECRUITERS_COMPANIES,
+  SmartRecruitersCompanyConfig,
+  ProviderFetchStats,
+  ProviderSourceFailure,
 } from '../lib/opportunityProvider';
 
 // ─── Constants & Advisory Lock Key ──────────────────────────────────────────
@@ -48,6 +56,10 @@ export interface IngestionConfig {
   greenhouseBoards?: GreenhouseBoardConfig[];
   /** Optional Lever board configurations */
   leverBoards?: LeverBoardConfig[];
+  /** Optional Ashby board configurations */
+  ashbyBoards?: AshbyBoardConfig[];
+  /** Optional SmartRecruiters company configurations */
+  smartRecruitersCompanies?: SmartRecruitersCompanyConfig[];
 }
 
 export interface ProviderRunResult {
@@ -60,6 +72,7 @@ export interface ProviderRunResult {
   durationMs: number;
   attempts: number;
   error?: string;
+  failedSources?: ProviderSourceFailure[];
 }
 
 export interface IngestionRunSummary {
@@ -101,6 +114,28 @@ export function parseLeverBoardsFromEnv(envValue?: string): LeverBoardConfig[] |
     const [site, ...rest] = entry.split(':');
     const name = rest.join(':').trim() || site.charAt(0).toUpperCase() + site.slice(1);
     return { site: site.trim(), companyName: name };
+  });
+}
+
+export function parseAshbyBoardsFromEnv(envValue?: string): AshbyBoardConfig[] | undefined {
+  if (!envValue || !envValue.trim()) return undefined;
+  const entries = envValue.split(',').map((s) => s.trim()).filter(Boolean);
+  if (entries.length === 0) return undefined;
+  return entries.map((entry) => {
+    const [token, ...rest] = entry.split(':');
+    const name = rest.join(':').trim() || token.charAt(0).toUpperCase() + token.slice(1);
+    return { boardToken: token.trim(), companyName: name };
+  });
+}
+
+export function parseSmartRecruitersCompaniesFromEnv(envValue?: string): SmartRecruitersCompanyConfig[] | undefined {
+  if (!envValue || !envValue.trim()) return undefined;
+  const entries = envValue.split(',').map((s) => s.trim()).filter(Boolean);
+  if (entries.length === 0) return undefined;
+  return entries.map((entry) => {
+    const [id, ...rest] = entry.split(':');
+    const name = rest.join(':').trim() || id.charAt(0).toUpperCase() + id.slice(1);
+    return { companyIdentifier: id.trim(), companyName: name };
   });
 }
 
@@ -149,6 +184,8 @@ export function loadIngestionConfigFromEnv(): IngestionConfig {
     maxScanLimit: maxScanLimit && !isNaN(maxScanLimit) ? maxScanLimit : 500,
     greenhouseBoards: parseGreenhouseBoardsFromEnv(process.env.GREENHOUSE_BOARDS),
     leverBoards: parseLeverBoardsFromEnv(process.env.LEVER_BOARDS),
+    ashbyBoards: parseAshbyBoardsFromEnv(process.env.ASHBY_BOARDS),
+    smartRecruitersCompanies: parseSmartRecruitersCompaniesFromEnv(process.env.SMARTRECRUITERS_COMPANIES),
   };
 }
 
@@ -172,8 +209,24 @@ export const defaultProviderFactory: ProviderFactory = (name: string, config: In
         maxScanLimit: config.maxScanLimit,
         timeoutMs: config.timeoutMs,
       });
+    case 'ashby':
+      return new AshbyProvider({
+        boards: config.ashbyBoards && config.ashbyBoards.length > 0 ? config.ashbyBoards : DEFAULT_ASHBY_BOARDS,
+        maxJobsPerBoard: config.maxJobsPerBoard,
+        maxScanLimit: config.maxScanLimit,
+        timeoutMs: config.timeoutMs,
+      });
+    case 'smartrecruiters':
+      return new SmartRecruitersProvider({
+        companies: config.smartRecruitersCompanies && config.smartRecruitersCompanies.length > 0
+          ? config.smartRecruitersCompanies
+          : DEFAULT_SMARTRECRUITERS_COMPANIES,
+        maxJobsPerBoard: config.maxJobsPerBoard,
+        maxScanLimit: config.maxScanLimit,
+        timeoutMs: config.timeoutMs,
+      });
     default:
-      throw new Error(`Unknown provider name: "${name}". Supported providers are: jobicy, greenhouse, lever.`);
+      throw new Error(`Unknown provider name: "${name}". Supported providers are: jobicy, greenhouse, lever, ashby, smartrecruiters.`);
   }
 };
 
@@ -224,7 +277,7 @@ export class IngestionScheduler {
   }
 
   /**
-   * Executes a single provider with bounded retries and timeout protection.
+   * Executes a single provider with bounded retries and timeout protection via AbortController cancellation.
    */
   private async runProviderWithRetries(
     provider: OpportunityProvider,
@@ -234,17 +287,26 @@ export class IngestionScheduler {
 
     while (attempts <= this.config.maxRetries) {
       attempts++;
+      const abortController = new AbortController();
+      let isTimedOut = false;
+
+      const timeoutId = setTimeout(() => {
+        isTimedOut = true;
+        abortController.abort(new Error(`Timeout: Ingestion for ${provider.name} exceeded ${this.config.timeoutMs}ms`));
+      }, this.config.timeoutMs);
+
       try {
-        // Enforce per-provider execution timeout
-        const stats = await Promise.race([
-          this.ingestor.ingest(provider),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Timeout: Ingestion for ${provider.name} exceeded ${this.config.timeoutMs}ms`)), this.config.timeoutMs)
-          ),
-        ]);
+        const stats = await this.ingestor.ingest(provider, abortController.signal);
+        clearTimeout(timeoutId);
         return { stats, attempts };
       } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
+        clearTimeout(timeoutId);
+        if (isTimedOut) {
+          lastError = new Error(`Timeout: Ingestion for ${provider.name} exceeded ${this.config.timeoutMs}ms`);
+        } else {
+          lastError = err instanceof Error ? err : new Error(String(err));
+        }
+
         if (attempts <= this.config.maxRetries) {
           const delay = this.config.retryDelayMs * Math.pow(2, attempts - 1);
           console.warn(`[IngestionScheduler] Provider "${provider.name}" attempt ${attempts} failed: ${lastError.message}. Retrying in ${delay}ms...`);
@@ -355,6 +417,9 @@ export class IngestionScheduler {
         totals.skipped += stats.skipped;
         totals.errors += stats.errors;
 
+        const fetchStats = providerInstance.getLastFetchStats?.();
+        const failedSources = fetchStats?.failedSources;
+
         if (error) {
           failureCount++;
           providerResults[providerName] = {
@@ -367,11 +432,12 @@ export class IngestionScheduler {
             durationMs,
             attempts,
             error: error.message,
+            ...(failedSources && failedSources.length > 0 ? { failedSources } : {}),
           };
           console.error(`[IngestionScheduler] Provider "${providerInstance.name}" FAILED after ${attempts} attempts: ${error.message}`);
         } else {
           successCount++;
-          providerResults[providerInstance.name.toLowerCase()] = {
+          providerResults[providerName] = {
             provider: providerInstance.name,
             status: 'SUCCESS',
             created: stats.created,
@@ -380,7 +446,14 @@ export class IngestionScheduler {
             errors: stats.errors,
             durationMs,
             attempts,
+            ...(failedSources && failedSources.length > 0 ? { failedSources } : {}),
           };
+          if (failedSources && failedSources.length > 0) {
+            console.warn(
+              `[IngestionScheduler] Provider "${providerInstance.name}" succeeded partially with ${failedSources.length} failed source(s):`,
+              failedSources,
+            );
+          }
           console.log(`[IngestionScheduler] Provider "${providerInstance.name}" finished in ${durationMs}ms: created=${stats.created}, updated=${stats.updated}, skipped=${stats.skipped}`);
         }
       }

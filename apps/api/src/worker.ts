@@ -17,10 +17,10 @@ USAGE:
 
 OPTIONS:
   --once, -1              Run a single ingestion cycle across configured providers and exit.
-  --providers=<list>      Comma-separated list of providers to run (e.g. --providers=jobicy,lever).
+  --providers=<list>      Comma-separated list of providers to run (e.g. --providers=jobicy,lever,ashby,smartrecruiters).
                           Overrides INGESTION_PROVIDERS environment variable.
   --interval=<minutes>    Override scheduled interval in minutes for daemon mode.
-  --limit=<count>         Maximum jobs retained per board for Greenhouse / Lever (default: 25).
+  --limit=<count>         Maximum jobs retained per board for ATS providers (default: 25).
   --scan-limit=<count>    Maximum raw records scanned per board (default: 500).
   --no-immediate          When starting in daemon mode, wait for the first interval instead of running immediately.
   --help, -h              Display this help message.
@@ -34,7 +34,10 @@ ENVIRONMENT VARIABLES:
   INGESTION_RETRY_DELAY_MS Initial retry backoff delay (default: 1000).
   INGESTION_TIMEOUT_MS    Per-provider network timeout (default: 30000).
   JOBICY_FETCH_COUNT      Number of listings requested from Jobicy (default: 50).
-  INGESTION_MAX_JOBS_PER_BOARD Cap jobs per board for Greenhouse / Lever pilot runs.
+  INGESTION_MAX_JOBS_PER_BOARD Cap jobs per board for ATS provider runs (default: 25).
+  INGESTION_MAX_SCAN_LIMIT Maximum listings scanned per board before filtering (default: 500).
+  ASHBY_BOARDS            Optional boardToken:CompanyName pairs for Ashby.
+  SMARTRECRUITERS_COMPANIES Optional companyIdentifier:CompanyName pairs for SmartRecruiters.
 
 EXAMPLES:
   # Run once manually for development:

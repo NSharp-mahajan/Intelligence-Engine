@@ -5,6 +5,7 @@ export interface JobicyFetchOptions {
   geo?: string;
   industry?: string;
   tag?: string;
+  signal?: AbortSignal;
 }
 
 export interface JobicyJobItem {
@@ -59,7 +60,11 @@ export class JobicyProvider implements OpportunityProvider {
     }
   }
 
-  async fetch(options?: JobicyFetchOptions): Promise<ExternalJob[]> {
+  async fetch(optionsOrSignal?: JobicyFetchOptions | AbortSignal): Promise<ExternalJob[]> {
+    const isSignal = optionsOrSignal instanceof AbortSignal || (optionsOrSignal && typeof (optionsOrSignal as any).aborted === 'boolean');
+    const signal = isSignal ? (optionsOrSignal as AbortSignal) : (optionsOrSignal as JobicyFetchOptions)?.signal;
+    const options = isSignal ? undefined : (optionsOrSignal as JobicyFetchOptions);
+
     const effectiveOptions = { ...this.defaultOptions, ...options };
     const url = new URL(this.baseUrl);
     if (effectiveOptions.count !== undefined) url.searchParams.set('count', effectiveOptions.count.toString());
@@ -72,6 +77,7 @@ export class JobicyProvider implements OpportunityProvider {
         'Accept': 'application/json',
         'User-Agent': 'Career-Intelligence-Engine/1.0',
       },
+      signal,
     });
 
     if (!response.ok) {
