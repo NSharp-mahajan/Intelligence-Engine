@@ -212,6 +212,37 @@ async function runTests() {
     assert(result.attempts === 1, 'Completed on attempt 1');
   }
 
+  // Test 4: Greenhouse and Lever Providers respect AbortSignal
+  console.log('\nTest 4: Greenhouse and Lever Providers abort immediately on AbortSignal');
+  {
+    const { GreenhouseProvider } = await import('./lib/greenhouseProvider');
+    const { LeverProvider } = await import('./lib/leverProvider');
+
+    const ghProvider = new GreenhouseProvider({ boards: [{ boardToken: 'test-board', companyName: 'Test' }] });
+    const leverProvider = new LeverProvider({ boards: [{ site: 'test-site', companyName: 'Test' }] });
+
+    const controller = new AbortController();
+    controller.abort(new Error('Pre-aborted test signal'));
+
+    let ghAborted = false;
+    try {
+      await ghProvider.fetch(controller.signal);
+    } catch (err) {
+      ghAborted = true;
+      assert(err instanceof Error && err.message.includes('aborted'), 'GreenhouseProvider rejected on abort signal');
+    }
+    assert(ghAborted, 'GreenhouseProvider respects AbortSignal before sending request');
+
+    let leverAborted = false;
+    try {
+      await leverProvider.fetch(controller.signal);
+    } catch (err) {
+      leverAborted = true;
+      assert(err instanceof Error && err.message.includes('aborted'), 'LeverProvider rejected on abort signal');
+    }
+    assert(leverAborted, 'LeverProvider respects AbortSignal before sending request');
+  }
+
   // Summary
   console.log(`\nSchedulerCancellation Test Results: ${passed} passed, ${failed} failed.\n`);
   if (failed > 0) {

@@ -2,12 +2,13 @@
 
 import React, { useEffect, useState, use } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { fetchApi } from '../../../../lib/api';
 import { Badge } from '../../../../components/ui/Badge';
 import { Button } from '../../../../components/ui/Button';
 import { Card, CardBody } from '../../../../components/ui/Card';
 import { CompanyLogo } from '../../../../components/CompanyLogo';
-import type { OpportunityResponse, Opportunity, MatchResultResponse } from '../../../../lib/types';
+import type { OpportunityResponse, Opportunity, MatchResultResponse, OpportunityEligibilityResponse } from '../../../../lib/types';
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return '';
@@ -38,6 +39,18 @@ function getSourceDescription(source: string | null | undefined): string {
   if (s === 'greenhouse') return 'Greenhouse Job Board';
   if (s === 'lever') return 'Lever Postings API';
   return `${formatSourceName(source)} Board`;
+}
+
+function isValidHttpUrl(urlStr?: string | null): boolean {
+  if (!urlStr || typeof urlStr !== 'string') return false;
+  const trimmed = urlStr.trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -93,17 +106,32 @@ interface PageProps {
 export default function OpportunityDetailPage({ params }: PageProps) {
   const unwrappedParams = use(params);
   const opportunityId = unwrappedParams.id;
+  const router = useRouter();
+
+  // Defensive routing guard: if a reserved path is routed to [id], redirect immediately
+  useEffect(() => {
+    if (opportunityId === 'early-career') {
+      router.replace('/opportunities/early-career');
+    } else if (opportunityId === 'india') {
+      router.replace('/opportunities/india');
+    }
+  }, [opportunityId, router]);
+
+  const isReservedRoute = opportunityId === 'early-career' || opportunityId === 'india';
   
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isReservedRoute);
   const [error, setError] = useState('');
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [sanitizedDescription, setSanitizedDescription] = useState('');
 
-  const [matchLoading, setMatchLoading] = useState(true);
+  const [matchLoading, setMatchLoading] = useState(!isReservedRoute);
   const [matchError, setMatchError] = useState('');
   const [matchResult, setMatchResult] = useState<MatchResultResponse | null>(null);
 
+  const [eligibilityResult, setEligibilityResult] = useState<OpportunityEligibilityResponse | null>(null);
+
   useEffect(() => {
+    if (isReservedRoute) return;
     let cancelled = false;
 
     async function loadOpportunity() {
@@ -145,8 +173,20 @@ export default function OpportunityDetailPage({ params }: PageProps) {
       }
     }
 
+    async function loadEligibility() {
+      try {
+        const res = await fetchApi<OpportunityEligibilityResponse>(`/opportunities/${opportunityId}/eligibility`);
+        if (!cancelled) {
+          setEligibilityResult(res);
+        }
+      } catch {
+        // Graceful fallback if unauthenticated or not an early-career opportunity
+      }
+    }
+
     loadOpportunity();
     loadMatch();
+    loadEligibility();
 
     return () => { cancelled = true; };
   }, [opportunityId]);
@@ -225,6 +265,201 @@ export default function OpportunityDetailPage({ params }: PageProps) {
 
       <div style={styles.layout} className="detail-layout">
         <div style={styles.mainContent}>
+          {/* Early Career Eligibility Alignment Section */}
+          {eligibilityResult && (
+            <div style={styles.matchSection}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <h2 style={styles.sectionTitle}>Early Career Eligibility</h2>
+                {eligibilityResult.category && (
+                  <Badge variant="neutral">{fmtEnum(eligibilityResult.category)}</Badge>
+                )}
+              </div>
+              <Card style={{
+                backgroundColor: eligibilityResult.overallStatus === 'ELIGIBLE'
+                  ? 'var(--success-bg)'
+                  : eligibilityResult.overallStatus === 'NOT_ELIGIBLE'
+                  ? 'var(--error-bg)'
+                  : '#fefce8',
+                borderColor: eligibilityResult.overallStatus === 'ELIGIBLE'
+                  ? 'var(--success-border)'
+                  : eligibilityResult.overallStatus === 'NOT_ELIGIBLE'
+                  ? 'var(--error-border)'
+                  : '#fef08a',
+              }}>
+                <CardBody>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <span style={{
+                      fontSize: '1rem',
+                      fontWeight: 700,
+                      color: eligibilityResult.overallStatus === 'ELIGIBLE'
+                        ? 'var(--success-text)'
+                        : eligibilityResult.overallStatus === 'NOT_ELIGIBLE'
+                        ? 'var(--error-text)'
+                        : '#a16207',
+                    }}>
+                      {eligibilityResult.overallStatus === 'ELIGIBLE'
+                        ? '✓ Verified Eligible'
+                        : eligibilityResult.overallStatus === 'NOT_ELIGIBLE'
+                        ? '✕ Not Eligible'
+                        : '⚠ Eligibility Needs Verification'}
+                    </span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Classification: {fmtEnum(eligibilityResult.overallVerificationLevel)}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--text-primary)', margin: '0 0 1rem 0', lineHeight: 1.5 }}>
+                    {eligibilityResult.overallExplanation}
+                  </p>
+
+                  <div style={{
+                    backgroundColor: 'var(--bg-surface)',
+                    padding: '1rem',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-light)'
+                  }}>
+                    {(() => {
+                      const entries = Object.entries(eligibilityResult.criteria).map(([criterionKey, crit]) => {
+                        const label = criterionKey === 'graduationBatch'
+                          ? 'Graduation Batch'
+                          : criterionKey === 'experience'
+                          ? 'Experience'
+                          : criterionKey === 'academics'
+                          ? 'Academics (CGPA/%)'
+                          : criterionKey === 'backlog'
+                          ? 'Backlog Policy'
+                          : criterionKey === 'degree'
+                          ? 'Degree'
+                          : 'Branch / Discipline';
+                        return { key: criterionKey, label, crit };
+                      });
+
+                      const candidateMissing = entries.filter((e) => e.crit.reasonCode === 'CANDIDATE_DATA_MISSING');
+                      const employerMissing = entries.filter((e) => e.crit.reasonCode === 'EMPLOYER_DATA_MISSING');
+                      const conflictItems = entries.filter((e) => e.crit.reasonCode === 'CONFLICT');
+                      const verifiedItems = entries.filter((e) => e.crit.reasonCode === 'VERIFIED');
+
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          {/* 1. Complete Your Profile */}
+                          {candidateMissing.length > 0 && (
+                            <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-md)', padding: '0.875rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  Complete Your Profile ({candidateMissing.length} needed)
+                                </span>
+                                <Link href="/profile" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent-primary)', textDecoration: 'none' }}>
+                                  Update profile →
+                                </Link>
+                              </div>
+                              <p style={{ fontSize: '0.75rem', color: '#78350f', margin: '0 0 0.5rem 0', lineHeight: 1.4 }}>
+                                These requirements cannot be evaluated because your candidate profile is missing this information:
+                              </p>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem' }}>
+                                {candidateMissing.map((item) => (
+                                  <div key={item.key} style={{ backgroundColor: '#ffffff', border: '1px solid #fde68a', borderRadius: 'var(--radius-sm)', padding: '0.5rem 0.75rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>{item.label}</span>
+                                      <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#b45309' }}>Missing</span>
+                                    </div>
+                                    <p style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
+                                      {item.crit.explanation}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 2. Not Specified by Employer */}
+                          {employerMissing.length > 0 && (
+                            <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', padding: '0.875rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  Not Specified by Employer ({employerMissing.length} open)
+                                </span>
+                                <span style={{ fontSize: '0.6875rem', color: 'var(--text-tertiary)' }}>No restrictions stated</span>
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem' }}>
+                                {employerMissing.map((item) => (
+                                  <div key={item.key} style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)', padding: '0.5rem 0.75rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>{item.label}</span>
+                                      <span style={{ fontSize: '0.6875rem', fontWeight: 500, color: 'var(--text-tertiary)' }}>Open</span>
+                                    </div>
+                                    <p style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
+                                      {item.crit.explanation}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 3. Needs Verification */}
+                          {conflictItems.length > 0 && (
+                            <div style={{ backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 'var(--radius-md)', padding: '0.875rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  Needs Verification ({conflictItems.length})
+                                </span>
+                                <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#c2410c' }}>Conflict detected</span>
+                              </div>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem' }}>
+                                {conflictItems.map((item) => (
+                                  <div key={item.key} style={{ backgroundColor: '#ffffff', border: '1px solid #fed7aa', borderRadius: 'var(--radius-sm)', padding: '0.5rem 0.75rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>{item.label}</span>
+                                      <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#c2410c' }}>Conflict</span>
+                                    </div>
+                                    <p style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
+                                      {item.crit.explanation}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 4. Verified Criteria */}
+                          {verifiedItems.length > 0 && (
+                            <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', padding: '0.875rem' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: '0.5rem' }}>
+                                Verified Requirements ({verifiedItems.length})
+                              </span>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem' }}>
+                                {verifiedItems.map((item) => {
+                                  const isElig = item.crit.status === 'ELIGIBLE';
+                                  return (
+                                    <div key={item.key} style={{
+                                      backgroundColor: isElig ? 'var(--success-bg)' : 'var(--error-bg)',
+                                      border: `1px solid ${isElig ? 'var(--success-border)' : 'var(--error-border)'}`,
+                                      borderRadius: 'var(--radius-sm)',
+                                      padding: '0.5rem 0.75rem',
+                                    }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>{item.label}</span>
+                                        <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: isElig ? 'var(--success-text)' : 'var(--error-text)' }}>
+                                          {isElig ? '✓ Satisfied' : '✕ Not Met'}
+                                        </span>
+                                      </div>
+                                      <p style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.35 }}>
+                                        {item.crit.explanation}
+                                      </p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </CardBody>
+              </Card>
+            </div>
+          )}
+
           {/* Your Match Section */}
           <div style={styles.matchSection}>
             <h2 style={styles.sectionTitle}>Your Match</h2>
@@ -391,10 +626,10 @@ export default function OpportunityDetailPage({ params }: PageProps) {
                   </div>
                 </div>
 
-                {(opportunity.sourceUrl || opportunity.applicationUrl) && (
+                {(isValidHttpUrl(opportunity.sourceUrl) || isValidHttpUrl(opportunity.applicationUrl)) && (
                   <div style={styles.transparencyFooter}>
                     <a
-                      href={opportunity.sourceUrl || opportunity.applicationUrl}
+                      href={(isValidHttpUrl(opportunity.sourceUrl) ? opportunity.sourceUrl : opportunity.applicationUrl) || '#'}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={styles.transparencyLink}
@@ -472,15 +707,17 @@ export default function OpportunityDetailPage({ params }: PageProps) {
                 )}
               </div>
 
-              <div style={styles.ctaContainer}>
-                <Button 
-                  fullWidth 
-                  variant="primary" 
-                  onClick={() => window.open(opportunity.applicationUrl, '_blank', 'noopener,noreferrer')}
-                >
-                  Apply on {formatSourceName(opportunity.source)} ↗
-                </Button>
-              </div>
+              {isValidHttpUrl(opportunity.applicationUrl) && (
+                <div style={styles.ctaContainer}>
+                  <Button 
+                    fullWidth 
+                    variant="primary" 
+                    onClick={() => window.open(opportunity.applicationUrl, '_blank', 'noopener,noreferrer')}
+                  >
+                    Apply on {formatSourceName(opportunity.source)} ↗
+                  </Button>
+                </div>
+              )}
             </CardBody>
           </Card>
         </div>

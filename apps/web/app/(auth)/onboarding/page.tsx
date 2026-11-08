@@ -30,7 +30,14 @@ export default function OnboardingPage() {
     fullName: '',
     university: '',
     degree: '',
+    branch: '',
     graduationYear: '',
+    cgpa: '',
+    cgpaScale: '',
+    percentage: '',
+    activeBacklogs: '',
+    hasBacklogHistory: '',
+    experienceMonths: '',
     targetRole: '',
     careerStage: '',
     targetCompanies: '',
@@ -51,8 +58,15 @@ export default function OnboardingPage() {
           setFormData({
             fullName: profile.fullName || '',
             university: profile.university || '',
-            degree: '', // Not in DB natively, kept in state
+            degree: profile.degree || '',
+            branch: profile.branch || '',
             graduationYear: profile.graduationYear?.toString() || '',
+            cgpa: profile.cgpa !== null && profile.cgpa !== undefined ? profile.cgpa.toString() : '',
+            cgpaScale: profile.cgpaScale || '',
+            percentage: profile.percentage !== null && profile.percentage !== undefined ? profile.percentage.toString() : '',
+            activeBacklogs: profile.activeBacklogs !== null && profile.activeBacklogs !== undefined ? profile.activeBacklogs.toString() : '',
+            hasBacklogHistory: profile.hasBacklogHistory === true ? 'true' : profile.hasBacklogHistory === false ? 'false' : '',
+            experienceMonths: profile.experienceMonths !== null && profile.experienceMonths !== undefined ? profile.experienceMonths.toString() : '',
             targetRole: profile.targetRole || '',
             careerStage: '',
             targetCompanies: '',
@@ -86,8 +100,43 @@ export default function OnboardingPage() {
     const newErrors: Record<string, string> = {};
     if (step === 1) {
       if (!formData.fullName.trim()) newErrors.fullName = "Full name is required";
-      if (formData.graduationYear && isNaN(Number(formData.graduationYear))) {
-        newErrors.graduationYear = "Must be a valid year";
+      if (formData.graduationYear) {
+        const year = Number(formData.graduationYear);
+        if (isNaN(year) || !Number.isInteger(year) || year < 1950 || year > 2100) {
+          newErrors.graduationYear = "Must be a valid year between 1950 and 2100";
+        }
+      }
+      if (formData.cgpa !== '') {
+        const val = Number(formData.cgpa);
+        if (isNaN(val) || val < 0) {
+          newErrors.cgpa = "CGPA cannot be negative";
+        } else if (!formData.cgpaScale) {
+          newErrors.cgpaScale = "Please select a CGPA scale";
+        } else if (formData.cgpaScale === 'SCALE_4_0' && val > 4.0) {
+          newErrors.cgpa = "CGPA cannot exceed 4.0 for a 4-point scale";
+        } else if (formData.cgpaScale === 'SCALE_7_0' && val > 7.0) {
+          newErrors.cgpa = "CGPA cannot exceed 7.0 for a 7-point scale";
+        } else if (formData.cgpaScale === 'SCALE_10_0' && val > 10.0) {
+          newErrors.cgpa = "CGPA cannot exceed 10.0 for a 10-point scale";
+        }
+      }
+      if (formData.percentage !== '') {
+        const val = Number(formData.percentage);
+        if (isNaN(val) || val < 0 || val > 100) {
+          newErrors.percentage = "Percentage must be between 0 and 100";
+        }
+      }
+      if (formData.activeBacklogs !== '') {
+        const val = Number(formData.activeBacklogs);
+        if (isNaN(val) || !Number.isInteger(val) || val < 0) {
+          newErrors.activeBacklogs = "Active backlogs cannot be negative";
+        }
+      }
+      if (formData.experienceMonths !== '') {
+        const val = Number(formData.experienceMonths);
+        if (isNaN(val) || !Number.isInteger(val) || val < 0) {
+          newErrors.experienceMonths = "Experience months cannot be negative";
+        }
       }
     } else if (step === 3) {
       const urlRegex = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
@@ -119,13 +168,21 @@ export default function OnboardingPage() {
       await fetchApi('/profile', {
         method: hasExistingProfile ? 'PUT' : 'POST',
         body: JSON.stringify({
-          fullName: formData.fullName,
-          university: formData.university || null,
-          graduationYear: formData.graduationYear ? parseInt(formData.graduationYear) : null,
-          targetRole: formData.targetRole || null,
-          githubUrl: formData.githubUrl || null,
-          linkedinUrl: formData.linkedinUrl || null,
-          portfolioUrl: formData.portfolioUrl || null,
+          fullName: formData.fullName.trim(),
+          university: formData.university.trim() || null,
+          graduationYear: formData.graduationYear ? parseInt(formData.graduationYear, 10) : null,
+          targetRole: formData.targetRole.trim() || null,
+          degree: formData.degree.trim() || null,
+          branch: formData.branch.trim() || null,
+          cgpa: formData.cgpa !== '' ? parseFloat(formData.cgpa) : null,
+          cgpaScale: formData.cgpaScale || null,
+          percentage: formData.percentage !== '' ? parseFloat(formData.percentage) : null,
+          activeBacklogs: formData.activeBacklogs !== '' ? parseInt(formData.activeBacklogs, 10) : null,
+          hasBacklogHistory: formData.hasBacklogHistory === 'true' ? true : formData.hasBacklogHistory === 'false' ? false : null,
+          experienceMonths: formData.experienceMonths !== '' ? parseInt(formData.experienceMonths, 10) : null,
+          githubUrl: formData.githubUrl.trim() || null,
+          linkedinUrl: formData.linkedinUrl.trim() || null,
+          portfolioUrl: formData.portfolioUrl.trim() || null,
         }),
       });
       router.push('/portal');
@@ -244,20 +301,157 @@ export default function OnboardingPage() {
                     error={errors.fullName}
                     required
                   />
+
+                  {/* Academic Information Group */}
+                  <div style={{ marginTop: '0.75rem', marginBottom: '0.25rem' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+                      Academic Information <span style={{ fontSize: '0.8125rem', fontWeight: 400, color: 'var(--text-tertiary)' }}>(Optional)</span>
+                    </h3>
+                    <p style={{ fontSize: '0.8125rem', color: 'var(--text-tertiary)', marginBottom: '0.75rem' }}>
+                      Used to accurately evaluate your eligibility for early career, fresher, and graduate trainee roles.
+                    </p>
+                  </div>
+
                   <Input 
-                    label="University (Optional)" 
+                    label="University / College (Optional)" 
                     name="university" 
                     value={formData.university} 
                     onChange={handleChange} 
-                    placeholder="Stanford University" 
+                    placeholder="e.g. Stanford University or IIT Bombay" 
                   />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <Input 
+                      label="Degree (Optional)" 
+                      name="degree" 
+                      value={formData.degree} 
+                      onChange={handleChange} 
+                      placeholder="e.g. B.Tech, B.E., BCA, M.Tech" 
+                    />
+                    <Input 
+                      label="Branch / Specialization (Optional)" 
+                      name="branch" 
+                      value={formData.branch} 
+                      onChange={handleChange} 
+                      placeholder="e.g. Computer Science, IT, ECE" 
+                    />
+                  </div>
+
                   <Input 
                     label="Graduation Year (Optional)" 
                     name="graduationYear" 
+                    type="number"
                     value={formData.graduationYear} 
                     onChange={handleChange} 
-                    placeholder="2025" 
+                    placeholder="e.g. 2026" 
                     error={errors.graduationYear}
+                  />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <Input 
+                      label="CGPA (Optional)" 
+                      name="cgpa" 
+                      type="number"
+                      step="0.01"
+                      value={formData.cgpa} 
+                      onChange={handleChange} 
+                      placeholder="e.g. 8.50" 
+                      error={errors.cgpa}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '1rem' }}>
+                      <label style={{ fontSize: '0.875rem', fontWeight: 500, color: errors.cgpaScale ? 'var(--error-text)' : 'var(--text-primary)' }}>
+                        CGPA Scale {formData.cgpa ? <span style={{ color: 'var(--error-text)' }}>*</span> : '(Optional)'}
+                      </label>
+                      <select
+                        name="cgpaScale"
+                        value={formData.cgpaScale}
+                        onChange={handleChange}
+                        style={{
+                          width: '100%',
+                          padding: '0.625rem 0.875rem',
+                          borderRadius: 'var(--radius-md)',
+                          border: `1px solid ${errors.cgpaScale ? 'var(--error-border)' : 'var(--border-light)'}`,
+                          fontSize: '0.9375rem',
+                          color: 'var(--text-primary)',
+                          backgroundColor: 'var(--bg-surface)',
+                          outline: 'none',
+                        }}
+                      >
+                        <option value="">-- Select Scale --</option>
+                        <option value="SCALE_10_0">10.0 Scale (e.g. Indian Universities)</option>
+                        <option value="SCALE_4_0">4.0 Scale (e.g. US / International)</option>
+                        <option value="SCALE_7_0">7.0 Scale</option>
+                        <option value="SCALE_UNKNOWN">Other / Unknown Scale</option>
+                      </select>
+                      {errors.cgpaScale && <span style={{ fontSize: '0.8125rem', color: 'var(--error-text)' }}>{errors.cgpaScale}</span>}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <Input 
+                      label="Percentage % (Optional)" 
+                      name="percentage" 
+                      type="number"
+                      step="0.1"
+                      value={formData.percentage} 
+                      onChange={handleChange} 
+                      placeholder="e.g. 78.5" 
+                      error={errors.percentage}
+                    />
+                    <Input 
+                      label="Active Backlogs (Optional)" 
+                      name="activeBacklogs" 
+                      type="number"
+                      value={formData.activeBacklogs} 
+                      onChange={handleChange} 
+                      placeholder="e.g. 0" 
+                      error={errors.activeBacklogs}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '1rem' }}>
+                    <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+                      Backlog History (Optional)
+                    </label>
+                    <select
+                      name="hasBacklogHistory"
+                      value={formData.hasBacklogHistory}
+                      onChange={handleChange}
+                      style={{
+                        width: '100%',
+                        padding: '0.625rem 0.875rem',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--border-light)',
+                        fontSize: '0.9375rem',
+                        color: 'var(--text-primary)',
+                        backgroundColor: 'var(--bg-surface)',
+                        outline: 'none',
+                      }}
+                    >
+                      <option value="">-- Select Backlog History --</option>
+                      <option value="false">No, never had any backlogs</option>
+                      <option value="true">Yes, have had backlogs in the past (cleared or active)</option>
+                    </select>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                      Distinct from active backlogs: some employers accept cleared past backlogs while others require zero history.
+                    </span>
+                  </div>
+
+                  {/* Experience Information Group */}
+                  <div style={{ marginTop: '0.75rem', marginBottom: '0.25rem' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+                      Experience Information <span style={{ fontSize: '0.8125rem', fontWeight: 400, color: 'var(--text-tertiary)' }}>(Optional)</span>
+                    </h3>
+                  </div>
+
+                  <Input 
+                    label="Total Relevant Experience in Months (Optional)" 
+                    name="experienceMonths" 
+                    type="number"
+                    value={formData.experienceMonths} 
+                    onChange={handleChange} 
+                    placeholder="e.g. 0 for freshers, 6 for 6 months, 12 for 1 year" 
+                    error={errors.experienceMonths}
                   />
                 </div>
               </div>

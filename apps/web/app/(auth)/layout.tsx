@@ -170,7 +170,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               </span>
               All Opportunities
             </Link>
-            <Link href="/opportunities/india" style={pathname === '/opportunities/india' ? styles.navItemActive : styles.navItem}>
+            <Link href="/opportunities/early-career" style={pathname.startsWith('/opportunities/early-career') ? styles.navItemActive : styles.navItem}>
+              <span style={styles.navIcon}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+              </span>
+              Early Opportunities
+            </Link>
+            <Link href="/opportunities/india" style={pathname.startsWith('/opportunities/india') ? styles.navItemActive : styles.navItem}>
               <span style={styles.navIcon}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
               </span>

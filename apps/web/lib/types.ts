@@ -29,6 +29,8 @@ export interface Project {
   projectSkills: ProjectSkill[];
 }
 
+export type CgpaScale = 'SCALE_10_0' | 'SCALE_4_0' | 'SCALE_7_0' | 'SCALE_UNKNOWN';
+
 export interface Profile {
   id: string;
   userId: string;
@@ -36,6 +38,19 @@ export interface Profile {
   university: string | null;
   graduationYear: number | null;
   targetRole: string | null;
+
+  // M2.6: Academic Information
+  degree?: string | null;
+  branch?: string | null;
+  cgpa?: number | null;
+  cgpaScale?: CgpaScale | null;
+  percentage?: number | null;
+  activeBacklogs?: number | null;
+  hasBacklogHistory?: boolean | null;
+
+  // M2.6: Experience Information
+  experienceMonths?: number | null;
+
   githubUrl: string | null;
   linkedinUrl: string | null;
   portfolioUrl: string | null;
@@ -121,6 +136,167 @@ export interface OpportunitiesResponse {
     city?: string;
     workMode?: string;
     stage?: string;
+  };
+}
+
+export type EarlyCareerCategory = 'INTERNSHIP' | 'FRESHER' | 'GRADUATE_TRAINEE' | 'ENTRY_LEVEL' | 'JUNIOR';
+
+export interface EarlyCareerClassification {
+  category: EarlyCareerCategory;
+  verificationLevel: string;
+  confidence: number;
+  explanation: string;
+  experienceConstraint: string;
+  experienceBoundType: string | null;
+  minExperienceMonths: number | null;
+  maxExperienceMonths: number | null;
+  batchConstraint: string;
+  eligibleBatches: number[];
+  relativeCohorts: string[];
+  academicConstraint: string;
+  academicEvaluationMode: string | null;
+  minCgpa: number | null;
+  cgpaScale: string | null;
+  minPercentage: number | null;
+  backlogPolicy: string;
+  maxActiveBacklogs: number | null;
+  degreeConstraint: string;
+  eligibleDegrees: string[];
+  branchConstraint: string;
+  eligibleBranches: string[];
+  hasConflict: boolean;
+  conflictDetails: string[];
+}
+
+export type CriterionReasonCode =
+  | 'VERIFIED'
+  | 'CANDIDATE_DATA_MISSING'
+  | 'EMPLOYER_DATA_MISSING'
+  | 'CONFLICT';
+
+export interface CriterionStatusDetail {
+  status: 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'UNKNOWN';
+  reason: string;
+  mandatory: boolean;
+  reasonCode?: CriterionReasonCode;
+  explanation?: string;
+}
+
+export interface CandidateEligibilitySummary {
+  overallStatus: 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'UNKNOWN';
+  overallExplanation: string;
+  hasConflict: boolean;
+  verificationLevel: string;
+  missingCandidateCount?: number;
+  missingEmployerCount?: number;
+  conflictCount?: number;
+  criteria: {
+    experience: CriterionStatusDetail;
+    graduationBatch: CriterionStatusDetail;
+    academics: CriterionStatusDetail;
+    backlog: CriterionStatusDetail;
+    degree: CriterionStatusDetail;
+    branch: CriterionStatusDetail;
+  };
+}
+
+export interface EarlyCareerSkillMatch {
+  score: number | null;
+  hasStructuredRequirements: boolean;
+  matchedCount: number;
+  missingCount: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+}
+
+export type EngineeringSubFamily =
+  | 'SOFTWARE_DEVELOPMENT'
+  | 'DEVOPS_PLATFORM'
+  | 'AI_ML_ENGINEERING'
+  | 'SECURITY_ENGINEERING'
+  | 'DATA_ENGINEERING'
+  | 'QA_TESTING'
+  | 'AMBIGUOUS';
+
+export interface OpportunityGeographicSummary {
+  isIndiaEligible: boolean;
+  classification: string;
+  hasVisaSponsorship: boolean;
+  geoScope: 'INDIA_DOMESTIC' | 'INTERNATIONAL_SPONSORED' | 'INTERNATIONAL_OTHER';
+  locationLabel: string;
+}
+
+export interface EarlyCareerOpportunity {
+  id: string;
+  title: string;
+  organization: string;
+  companyLogoUrl?: string | null;
+  location: string | null;
+  workMode: string;
+  type: string;
+  employmentType: string;
+  experienceLevel: string;
+  postedDate: string | null;
+  createdAt: string;
+  applicationUrl: string | null;
+  hasValidApplicationUrl: boolean;
+  source: string;
+  sourceUrl: string | null;
+  jobFamily?: 'SOFTWARE_ENGINEERING' | 'OTHER';
+  specialization?: EngineeringSubFamily | null;
+  geographic?: OpportunityGeographicSummary;
+  earlyCareer: EarlyCareerClassification;
+  eligibility: CandidateEligibilitySummary | null;
+  match: EarlyCareerSkillMatch | null;
+}
+
+export interface EarlyOpportunitiesResponse {
+  opportunities: EarlyCareerOpportunity[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  candidateContext: {
+    isAuthenticated: boolean;
+    hasProfile: boolean;
+    profileComplete: boolean;
+  };
+  filters: {
+    category?: string;
+    city?: string | null;
+    location?: string | null;
+    workMode?: string;
+    batch?: number | null;
+    eligibility?: string;
+    search?: string | null;
+    skill?: string | null;
+    jobFamily?: string;
+    specialization?: string;
+    indiaOnly?: boolean;
+    geoScope?: string;
+    sort?: string;
+  };
+}
+
+export interface OpportunityEligibilityResponse {
+  opportunityId: string;
+  overallStatus: 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'UNKNOWN';
+  overallExplanation: string;
+  category: string | null;
+  overallVerificationLevel: string;
+  hasConflict: boolean;
+  missingCandidateCount?: number;
+  missingEmployerCount?: number;
+  conflictCount?: number;
+  criteria: {
+    experience: CriterionStatusDetail;
+    graduationBatch: CriterionStatusDetail;
+    academics: CriterionStatusDetail;
+    backlog: CriterionStatusDetail;
+    degree: CriterionStatusDetail;
+    branch: CriterionStatusDetail;
   };
 }
 

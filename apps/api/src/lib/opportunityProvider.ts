@@ -1,5 +1,10 @@
 import { PrismaClient, RequirementType } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
+import {
+  earlyCareerClassifier,
+  canonicalJsonStringify,
+  type EarlyCareerClassificationResult,
+} from '../services/earlyCareerClassifier';
 
 // Define enum values locally to avoid Prisma client generation issues
 const OpportunityType = {
@@ -48,13 +53,14 @@ export interface ExternalJob {
   workMode?: string;
   employmentType?: string;
   experienceLevel?: string;
-  applicationUrl: string;
-  sourceUrl?: string;
+  applicationUrl?: string | null;
+  sourceUrl?: string | null;
   source: string;
   postedDate?: string | Date;
   deadline?: string | Date;
   requiredSkills?: string[];
   preferredSkills?: string[];
+  metadata?: Record<string, any>;
 }
 
 export interface NormalizedOpportunity {
@@ -74,15 +80,19 @@ export interface NormalizedOpportunity {
   deadline: Date | null;
   requiredSkills: string[];
   preferredSkills: string[];
+  earlyCareerClassification?: EarlyCareerClassificationResult;
 }
 
 export interface ProviderSourceFailure {
   source: string;
   error: string;
+  partial?: boolean;
+  failedOffset?: number;
 }
 
 export interface ProviderFetchStats {
   successfulSources: string[];
+  partialSources?: string[];
   failedSources: ProviderSourceFailure[];
 }
 
@@ -109,6 +119,7 @@ export {
   DEFAULT_SMARTRECRUITERS_COMPANIES,
   VERIFIED_INDIA_SMARTRECRUITERS_COMPANIES,
   buildSmartRecruitersFullDescription,
+  isConfirmedPublicPostingUrl,
   type SmartRecruitersCompanyConfig,
   type SmartRecruitersProviderOptions,
   type SmartRecruitersJobItem,
@@ -116,9 +127,119 @@ export {
   type SmartRecruitersPostingDetail,
 } from './smartRecruitersProvider';
 export * from '../services/indiaLocationClassifier';
+export {
+  earlyCareerClassifier,
+  classifyEarlyCareerOpportunity,
+  canonicalJsonStringify,
+  type EarlyCareerClassificationResult,
+  type EarlyCareerCategory,
+  type VerificationLevel,
+} from '../services/earlyCareerClassifier';
 import { IndiaLocationClassifier } from '../services/indiaLocationClassifier';
 
+export function isValidHttpUrl(urlStr?: string | null): boolean {
+  if (!urlStr || typeof urlStr !== 'string') return false;
+  const trimmed = urlStr.trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export class OpportunityNormalizer {
+  private classificationCache = new Map<string, EarlyCareerClassificationResult>();
+  private readonly MAX_CACHE_SIZE = 5000;
+
+  /**
+   * Computes a deterministic canonical cache key representing every classification-relevant input:
+   * title, description, employmentType, experienceLevel, and metadata (sorted keys).
+   */
+  computeClassificationCacheKey(job: {
+    title?: string;
+    description?: string;
+    employmentType?: string | null;
+    experienceLevel?: string | null;
+    metadata?: Record<string, any> | null;
+  }): string {
+    const normTitle = (job.title || '').trim().toLowerCase();
+    const normDesc = (job.description || '').trim();
+    const normEmpType = (job.employmentType || '').trim().toLowerCase();
+    const normExpLevel = (job.experienceLevel || '').trim().toLowerCase();
+    const metaStr = canonicalJsonStringify(job.metadata || {});
+
+    const raw = `title:${normTitle}|||desc:${normDesc}|||emp:${normEmpType}|||exp:${normExpLevel}|||meta:${metaStr}`;
+    return createHash('sha256').update(raw).digest('hex');
+  }
+
+  classifyEarlyCareerWithCache(job: ExternalJob): EarlyCareerClassificationResult {
+    try {
+      const contentHash = this.computeClassificationCacheKey(job);
+      const cached = this.classificationCache.get(contentHash);
+      if (cached) {
+        return cached;
+      }
+
+      const result = earlyCareerClassifier.classify({
+        title: job.title || '',
+        description: job.description || '',
+        company: job.company || '',
+        location: job.location,
+        employmentType: job.employmentType,
+        experienceLevel: job.experienceLevel,
+        metadata: (job as any)?.metadata,
+        sourceUrl: job.sourceUrl,
+      });
+
+      if (this.classificationCache.size >= this.MAX_CACHE_SIZE) {
+        const keysToEvict = Array.from(this.classificationCache.keys()).slice(0, 500);
+        for (const k of keysToEvict) this.classificationCache.delete(k);
+      }
+
+      this.classificationCache.set(contentHash, result);
+      return result;
+    } catch (err) {
+      console.warn(`[OpportunityNormalizer] Warning: Early career classification failed for "${job.title}":`, err);
+      return {
+        category: 'UNKNOWN',
+        confidence: 0.0,
+        explanation: 'Classification suspended due to unexpected normalization error.',
+        overallVerificationLevel: 'UNVERIFIED',
+        experienceConstraint: 'UNKNOWN',
+        experienceBoundType: null,
+        minExperienceMonths: null,
+        maxExperienceMonths: null,
+        batchConstraint: 'UNKNOWN',
+        eligibleBatches: [],
+        relativeCohorts: [],
+        academicConstraint: 'UNKNOWN',
+        minCgpa: null,
+        cgpaScale: null,
+        minPercentage: null,
+        academicEvaluationMode: null,
+        backlogPolicy: 'UNKNOWN',
+        maxActiveBacklogs: null,
+        degreeConstraint: 'UNKNOWN',
+        eligibleDegrees: [],
+        branchConstraint: 'UNKNOWN',
+        eligibleBranches: [],
+        hasConflict: false,
+        conflictDetails: [],
+        evidenceRecords: [],
+      };
+    }
+  }
+
+  getClassificationCacheSize(): number {
+    return this.classificationCache.size;
+  }
+
+  clearClassificationCache(): void {
+    this.classificationCache.clear();
+  }
+
   private skillNormalizationMap: Map<string, string> = new Map([
     ['react.js', 'react'],
     ['reactjs', 'react'],
@@ -316,8 +437,8 @@ export class OpportunityNormalizer {
   }
 
   normalize(job: ExternalJob): NormalizedOpportunity {
-    const rawTitle = job.title.trim();
-    const rawDesc = job.description.trim();
+    const rawTitle = (job.title || '').trim();
+    const rawDesc = (job.description || '').trim();
 
     const indiaClassification = IndiaLocationClassifier.classify(
       job.location,
@@ -339,6 +460,14 @@ export class OpportunityNormalizer {
           ? (indiaClassification.effectiveWorkMode as WorkModeValue)
           : WorkMode.UNKNOWN);
 
+    const rawAppUrl = typeof job.applicationUrl === 'string' ? job.applicationUrl.trim() : '';
+    const applicationUrl = isValidHttpUrl(rawAppUrl) ? rawAppUrl : '';
+
+    const rawSourceUrl = typeof job.sourceUrl === 'string' ? job.sourceUrl.trim() : '';
+    const sourceUrl = isValidHttpUrl(rawSourceUrl) ? rawSourceUrl : null;
+
+    const earlyCareerClassification = this.classifyEarlyCareerWithCache(job);
+
     return {
       title: rawTitle,
       organization: job.company.trim(),
@@ -348,14 +477,15 @@ export class OpportunityNormalizer {
       workMode: effectiveWorkMode,
       employmentType: this.normalizeEmploymentType(job.employmentType, rawTitle),
       experienceLevel: this.normalizeExperienceLevel(job.experienceLevel, rawTitle, rawDesc),
-      applicationUrl: job.applicationUrl.trim(),
+      applicationUrl,
       source: job.source.trim(),
-      sourceUrl: job.sourceUrl?.trim() || null,
+      sourceUrl,
       sourceJobId: job.id?.trim() || null,
       postedDate: job.postedDate ? new Date(job.postedDate) : null,
       deadline: job.deadline ? new Date(job.deadline) : null,
       requiredSkills: (job.requiredSkills || []).map(s => this.normalizeSkill(s)),
       preferredSkills: (job.preferredSkills || []).map(s => this.normalizeSkill(s)),
+      earlyCareerClassification,
     };
   }
 }
@@ -506,6 +636,18 @@ export class OpportunityIngestor {
                   });
                 }
               }
+
+              // Persist Early Career Classification if available
+              if (normalized.earlyCareerClassification) {
+                const sourceContentHash = this.normalizer.computeClassificationCacheKey(job);
+                await this.persistEligibility(
+                  tx,
+                  existingId,
+                  normalized.earlyCareerClassification,
+                  sourceContentHash,
+                  now
+                );
+              }
             }
           });
 
@@ -588,15 +730,319 @@ export class OpportunityIngestor {
               },
             });
           }
+
+          // Persist Early Career Classification if available
+          if (normalized.earlyCareerClassification) {
+            const sourceContentHash = this.normalizer.computeClassificationCacheKey(job);
+            await this.persistEligibility(
+              tx,
+              opportunity.id,
+              normalized.earlyCareerClassification,
+              sourceContentHash,
+              now
+            );
+          }
         });
 
         created++;
       } catch (error) {
+        if (signal?.aborted) {
+          throw new Error(`Ingestion aborted for ${provider.name}: Operation cancelled during database write`);
+        }
         console.error('Error ingesting opportunity:', error);
         errors++;
       }
     }
 
     return { created, updated, skipped, errors };
+  }
+
+  /**
+   * Persists or updates the Early Career Eligibility classification and its relational evidence records.
+   *
+   * Idempotency & Lifecycle rules:
+   * 1. If no eligibility record exists: creates OpportunityEligibility and active OpportunityEligibilityEvidence records.
+   * 2. If eligibility record exists with the same sourceContentHash and classifierVersion: idempotent no-op (updates updatedAt only).
+   * 3. If sourceContentHash or classifierVersion changed:
+   *    - Marks old active evidence as isActive: false, sets supersededAt: now.
+   *    - Inserts new active evidence records.
+   *    - Points old superseded records to new evidence via supersededById.
+   *    - Transitions stale MANUALLY_AUDITED evidence to REVIEW_REQUIRED upon source content modification.
+   *    - Updates OpportunityEligibility with newly classified fields.
+   */
+  public async persistEligibility(
+    tx: any,
+    opportunityId: string,
+    classification: EarlyCareerClassificationResult,
+    sourceContentHash: string,
+    now: Date = new Date(),
+    classifierVersion: string = 'early-career-v1'
+  ): Promise<void> {
+    if (!tx || !tx.opportunityEligibility || !tx.opportunityEligibilityEvidence) {
+      return;
+    }
+
+    // Helper to enforce SQL invariant: exactly one active evidence row per (eligibilityId, criterion)
+    const consolidateEvidenceByCriterion = (
+      records: EarlyCareerClassificationResult['evidenceRecords']
+    ): EarlyCareerClassificationResult['evidenceRecords'] => {
+      const byCriterion = new Map<string, typeof records>();
+      for (const ev of records) {
+        const list = byCriterion.get(ev.criterion) || [];
+        list.push(ev);
+        byCriterion.set(ev.criterion, list);
+      }
+
+      const result: EarlyCareerClassificationResult['evidenceRecords'] = [];
+      for (const [criterion, items] of byCriterion.entries()) {
+        if (items.length === 1) {
+          result.push(items[0]);
+          continue;
+        }
+
+        const rawValues = items.map((r) => r.rawValue).filter(Boolean);
+        const hasConflict = items.some((r) => r.hasConflict);
+        const conflictReasons = items.map((r) => r.conflictReason).filter(Boolean);
+
+        let verificationLevel = items[0].verificationLevel;
+        if (hasConflict || items.some((r) => r.verificationLevel === 'UNVERIFIED')) {
+          verificationLevel = 'UNVERIFIED';
+        } else if (items.some((r) => r.verificationLevel === 'REVIEW_REQUIRED')) {
+          verificationLevel = 'REVIEW_REQUIRED';
+        } else if (items.some((r) => r.verificationLevel === 'INFERRED_HEURISTIC')) {
+          verificationLevel = 'INFERRED_HEURISTIC';
+        } else if (items.every((r) => r.verificationLevel === 'MANUALLY_AUDITED')) {
+          verificationLevel = 'MANUALLY_AUDITED';
+        } else if (items.every((r) => r.verificationLevel === 'AUTOMATED_HIGH_CONFIDENCE')) {
+          verificationLevel = 'AUTOMATED_HIGH_CONFIDENCE';
+        }
+
+        const minConfidence = Math.min(...items.map((r) => r.confidence));
+
+        const mergedNormalized: Record<string, any> = {};
+        for (const r of items) {
+          if (typeof r.normalizedValue === 'object' && r.normalizedValue !== null) {
+            Object.assign(mergedNormalized, r.normalizedValue);
+          }
+        }
+        mergedNormalized.items = items.map((r) => ({
+          rawValue: r.rawValue,
+          normalizedValue: r.normalizedValue,
+          confidence: r.confidence,
+        }));
+
+        result.push({
+          criterion: criterion as any,
+          rawValue: rawValues.join('; '),
+          normalizedValue: mergedNormalized,
+          confidence: minConfidence,
+          verificationLevel,
+          extractionMethod: items[0].extractionMethod,
+          sourceField: items.map((r) => r.sourceField).filter((v, i, a) => a.indexOf(v) === i).join(', '),
+          hasConflict,
+          conflictReason: conflictReasons.length > 0 ? conflictReasons.join('; ') : undefined,
+        });
+      }
+      return result;
+    };
+
+    const existingEligibility = await tx.opportunityEligibility.findUnique({
+      where: { opportunityId },
+    });
+
+    if (!existingEligibility) {
+      // ── Create New Eligibility Record ──────────────────────────────────────
+      const eligibilityId = randomUUID();
+      await tx.opportunityEligibility.create({
+        data: {
+          id: eligibilityId,
+          opportunityId,
+          category: classification.category,
+          confidence: classification.confidence,
+          overallVerificationLevel: classification.overallVerificationLevel,
+          explanation: classification.explanation,
+
+          experienceConstraint: classification.experienceConstraint,
+          experienceBoundType: classification.experienceBoundType,
+          minExperienceMonths: classification.minExperienceMonths,
+          maxExperienceMonths: classification.maxExperienceMonths,
+
+          batchConstraint: classification.batchConstraint,
+          eligibleBatches: classification.eligibleBatches,
+          relativeCohorts: classification.relativeCohorts,
+
+          academicConstraint: classification.academicConstraint,
+          academicEvaluationMode: classification.academicEvaluationMode,
+          minCgpa: classification.minCgpa,
+          cgpaScale: classification.cgpaScale,
+          minPercentage: classification.minPercentage,
+          backlogPolicy: classification.backlogPolicy,
+          maxActiveBacklogs: classification.maxActiveBacklogs,
+
+          degreeConstraint: classification.degreeConstraint,
+          eligibleDegrees: classification.eligibleDegrees,
+          branchConstraint: classification.branchConstraint,
+          eligibleBranches: classification.eligibleBranches,
+
+          hasConflict: classification.hasConflict,
+          conflictDetails: classification.conflictDetails,
+          sourceContentHash,
+          classifierVersion,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      // Insert Initial Active Evidence Records
+      const activeEvidenceList = consolidateEvidenceByCriterion(classification.evidenceRecords);
+      for (const ev of activeEvidenceList) {
+        await tx.opportunityEligibilityEvidence.create({
+          data: {
+            id: randomUUID(),
+            eligibilityId,
+            criterion: ev.criterion,
+            rawValue: ev.rawValue,
+            normalizedValue: ev.normalizedValue,
+            confidence: ev.confidence,
+            verificationLevel: ev.verificationLevel,
+            extractionMethod: ev.extractionMethod,
+            sourceField: ev.sourceField,
+            hasConflict: ev.hasConflict,
+            conflictReason: ev.conflictReason ?? null,
+            sourceContentHash,
+            extractorVersion: classifierVersion,
+            isActive: true,
+            createdAt: now,
+          },
+        });
+      }
+      return;
+    }
+
+    // ── Existing Eligibility: Idempotency Check ─────────────────────────────
+    const isIdentical =
+      existingEligibility.sourceContentHash === sourceContentHash &&
+      existingEligibility.classifierVersion === classifierVersion;
+
+    if (isIdentical) {
+      // Re-ingestion with unchanged content: idempotent touch without duplicating evidence
+      await tx.opportunityEligibility.update({
+        where: { id: existingEligibility.id },
+        data: { updatedAt: now },
+      });
+      return;
+    }
+
+    // ── Content or Extractor Version Changed: Supersede Evidence Lifecycle ───
+    const activeEvidences: Array<{
+      id: string;
+      criterion: string;
+      verificationLevel: string;
+    }> = await tx.opportunityEligibilityEvidence.findMany({
+      where: {
+        eligibilityId: existingEligibility.id,
+        isActive: true,
+      },
+    });
+
+    const oldByCriterion = new Map<string, typeof activeEvidences[0]>();
+    for (const oldEv of activeEvidences) {
+      oldByCriterion.set(oldEv.criterion, oldEv);
+    }
+
+    // Insert new active evidence records and link supersession
+    const updatedEvidenceList = consolidateEvidenceByCriterion(classification.evidenceRecords);
+    for (const ev of updatedEvidenceList) {
+      const newEvidenceId = randomUUID();
+      const oldEv = oldByCriterion.get(ev.criterion);
+
+      await tx.opportunityEligibilityEvidence.create({
+        data: {
+          id: newEvidenceId,
+          eligibilityId: existingEligibility.id,
+          criterion: ev.criterion,
+          rawValue: ev.rawValue,
+          normalizedValue: ev.normalizedValue,
+          confidence: ev.confidence,
+          verificationLevel: ev.verificationLevel,
+          extractionMethod: ev.extractionMethod,
+          sourceField: ev.sourceField,
+          hasConflict: ev.hasConflict,
+          conflictReason: ev.conflictReason ?? null,
+          sourceContentHash,
+          extractorVersion: classifierVersion,
+          isActive: true,
+          createdAt: now,
+        },
+      });
+
+      if (oldEv) {
+        const nextVerification =
+          oldEv.verificationLevel === 'MANUALLY_AUDITED' ? 'REVIEW_REQUIRED' : oldEv.verificationLevel;
+        await tx.opportunityEligibilityEvidence.update({
+          where: { id: oldEv.id },
+          data: {
+            isActive: false,
+            supersededAt: now,
+            supersededById: newEvidenceId,
+            verificationLevel: nextVerification,
+          },
+        });
+        oldByCriterion.delete(ev.criterion);
+      }
+    }
+
+    // Supersede any remaining active evidence whose criterion is not present in new extraction
+    for (const remainingOld of oldByCriterion.values()) {
+      const nextVerification =
+        remainingOld.verificationLevel === 'MANUALLY_AUDITED' ? 'REVIEW_REQUIRED' : remainingOld.verificationLevel;
+      await tx.opportunityEligibilityEvidence.update({
+        where: { id: remainingOld.id },
+        data: {
+          isActive: false,
+          supersededAt: now,
+          verificationLevel: nextVerification,
+        },
+      });
+    }
+
+    // Update OpportunityEligibility to the new classification state
+    await tx.opportunityEligibility.update({
+      where: { id: existingEligibility.id },
+      data: {
+        category: classification.category,
+        confidence: classification.confidence,
+        overallVerificationLevel: classification.overallVerificationLevel,
+        explanation: classification.explanation,
+
+        experienceConstraint: classification.experienceConstraint,
+        experienceBoundType: classification.experienceBoundType,
+        minExperienceMonths: classification.minExperienceMonths,
+        maxExperienceMonths: classification.maxExperienceMonths,
+
+        batchConstraint: classification.batchConstraint,
+        eligibleBatches: classification.eligibleBatches,
+        relativeCohorts: classification.relativeCohorts,
+
+        academicConstraint: classification.academicConstraint,
+        academicEvaluationMode: classification.academicEvaluationMode,
+        minCgpa: classification.minCgpa,
+        cgpaScale: classification.cgpaScale,
+        minPercentage: classification.minPercentage,
+        backlogPolicy: classification.backlogPolicy,
+        maxActiveBacklogs: classification.maxActiveBacklogs,
+
+        degreeConstraint: classification.degreeConstraint,
+        eligibleDegrees: classification.eligibleDegrees,
+        branchConstraint: classification.branchConstraint,
+        eligibleBranches: classification.eligibleBranches,
+
+        hasConflict: classification.hasConflict,
+        conflictDetails: classification.conflictDetails,
+        sourceContentHash,
+        classifierVersion,
+        updatedAt: now,
+      },
+    });
   }
 }

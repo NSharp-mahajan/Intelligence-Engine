@@ -31,6 +31,7 @@ Thumbs.db
 
 # Database dumps / backups
 *.sql
+!apps/api/prisma/migrations/**/migration.sql
 *.dump
 backups/
 *.pdf

@@ -1,4 +1,4 @@
-import type { ExternalJob, OpportunityProvider } from './opportunityProvider';
+import type { ExternalJob, OpportunityProvider, ProviderFetchStats } from './opportunityProvider';
 import { extractOpportunitySkills } from '../services/opportunitySkillExtractor';
 import { IndiaLocationClassifier } from '../services/indiaLocationClassifier';
 
@@ -105,6 +105,7 @@ export class GreenhouseProvider implements OpportunityProvider {
   private readonly timeoutMs: number;
   private readonly maxJobsPerBoard?: number;
   private readonly maxScanLimit: number;
+  private lastFetchStats: ProviderFetchStats = { successfulSources: [], failedSources: [] };
 
   constructor(options?: GreenhouseProviderOptions | GreenhouseBoardConfig[]) {
     if (Array.isArray(options)) {
@@ -124,19 +125,45 @@ export class GreenhouseProvider implements OpportunityProvider {
     return this.boards;
   }
 
-  async fetch(): Promise<ExternalJob[]> {
+  getLastFetchStats(): ProviderFetchStats {
+    return this.lastFetchStats;
+  }
+
+  async fetch(signal?: AbortSignal): Promise<ExternalJob[]> {
+    if (signal?.aborted) {
+      throw new Error(`[GreenhouseProvider] Operation aborted before starting fetch`);
+    }
+
+    this.lastFetchStats = { successfulSources: [], failedSources: [] };
     const allJobs: ExternalJob[] = [];
 
     for (const board of this.boards) {
+      if (signal?.aborted) {
+        throw new Error(`[GreenhouseProvider] Operation aborted during board iteration`);
+      }
+
       try {
-        const boardJobs = await this.fetchBoard(board);
+        const boardJobs = await this.fetchBoard(board, signal);
         allJobs.push(...boardJobs);
+        this.lastFetchStats.successfulSources.push(board.boardToken);
       } catch (error) {
+        if (signal?.aborted) {
+          throw error;
+        }
+        const errMsg = error instanceof Error ? error.message : String(error);
+        this.lastFetchStats.failedSources.push({ source: board.boardToken, error: errMsg });
         console.error(
           `[GreenhouseProvider] Failed to fetch board "${board.boardToken}" (${board.companyName}):`,
-          error instanceof Error ? error.message : error,
+          errMsg,
         );
       }
+    }
+
+    // If every configured board failed, propagate error
+    if (this.boards.length > 0 && this.lastFetchStats.failedSources.length === this.boards.length) {
+      throw new Error(
+        `All ${this.boards.length} configured Greenhouse boards failed: ${this.lastFetchStats.failedSources.map((f) => `${f.source} (${f.error})`).join('; ')}`,
+      );
     }
 
     return allJobs;
@@ -153,15 +180,21 @@ export class GreenhouseProvider implements OpportunityProvider {
    * 3. Retains non-India jobs up to the remaining quota of maxJobsPerBoard, preserving
    *    the shared Opportunity table contract without truncation bias.
    */
-  async fetchBoard(board: GreenhouseBoardConfig): Promise<ExternalJob[]> {
+  async fetchBoard(board: GreenhouseBoardConfig, signal?: AbortSignal): Promise<ExternalJob[]> {
+    if (signal?.aborted) {
+      throw new Error(`[GreenhouseProvider] Request aborted before sending for "${board.boardToken}"`);
+    }
+
     const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board.boardToken)}/jobs?content=true`;
+    const timeoutSignal = AbortSignal.timeout(this.timeoutMs);
+    const combinedSignal = signal ? AbortSignal.any([timeoutSignal, signal]) : timeoutSignal;
 
     const response = await fetch(url, {
       headers: {
         'Accept': 'application/json',
         'User-Agent': 'Career-Intelligence-Engine/1.0',
       },
-      signal: AbortSignal.timeout(this.timeoutMs),
+      signal: combinedSignal,
     });
 
     if (!response.ok) {

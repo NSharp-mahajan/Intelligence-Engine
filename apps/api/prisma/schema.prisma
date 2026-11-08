@@ -18,21 +18,34 @@ model User {
 }
 
 model Profile {
-  id             String           @id @default(uuid())
-  userId         String           @unique
-  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fullName       String
-  university     String?
-  graduationYear Int?
-  targetRole     String?
-  githubUrl      String?
-  linkedinUrl    String?
-  portfolioUrl   String?
-  resumeUrl      String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  candidateSkills CandidateSkill[]
-  projects       Project[]
+  id                String           @id @default(uuid())
+  userId            String           @unique
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName          String
+  university        String?
+  graduationYear    Int?
+  targetRole        String?
+
+  // M2.6: Academic Information
+  degree            String?
+  branch            String?
+  cgpa              Float?
+  cgpaScale         CgpaScale?
+  percentage        Float?
+  activeBacklogs    Int?
+  hasBacklogHistory Boolean?
+
+  // M2.6: Experience Information
+  experienceMonths  Int?
+
+  githubUrl         String?
+  linkedinUrl       String?
+  portfolioUrl      String?
+  resumeUrl         String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  candidateSkills   CandidateSkill[]
+  projects          Project[]
 }
 
 enum SkillCategory {
@@ -118,25 +131,26 @@ enum ExperienceLevel {
 }
 
 model Opportunity {
-  id                String             @id @default(uuid())
+  id                String                  @id @default(uuid())
   title             String
   organization      String
   description       String
   type              OpportunityType
   location          String?
-  workMode          WorkMode           @default(UNKNOWN)
-  employmentType    EmploymentType     @default(UNKNOWN)
-  experienceLevel   ExperienceLevel    @default(UNKNOWN)
+  workMode          WorkMode                @default(UNKNOWN)
+  employmentType    EmploymentType          @default(UNKNOWN)
+  experienceLevel   ExperienceLevel         @default(UNKNOWN)
   applicationUrl    String
   source            String
   sourceUrl         String?
   sourceJobId       String?
   postedDate        DateTime?
   deadline          DateTime?
-  lastSeenAt        DateTime           @default(now())
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  lastSeenAt        DateTime                @default(now())
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
   opportunitySkills OpportunitySkill[]
+  eligibility       OpportunityEligibility?
 
   @@unique([source, sourceJobId])
   @@index([type])
@@ -172,4 +186,173 @@ model Session {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// ============================================================================
+// M2.4: EARLY CAREER ELIGIBILITY ENUMS & RELATIONAL MODELS
+// ============================================================================
+
+enum EarlyCareerCategory {
+  INTERNSHIP
+  FRESHER
+  GRADUATE_TRAINEE
+  ENTRY_LEVEL
+  JUNIOR
+  NOT_EARLY_CAREER
+  UNKNOWN
+}
+
+enum VerificationLevel {
+  MANUALLY_AUDITED
+  AUTOMATED_HIGH_CONFIDENCE
+  INFERRED_HEURISTIC
+  REVIEW_REQUIRED
+  UNVERIFIED
+}
+
+enum ConstraintState {
+  RESTRICTED
+  UNRESTRICTED
+  UNKNOWN
+}
+
+enum ExperienceBoundType {
+  EXACT_RANGE
+  MINIMUM_ONLY
+  MAXIMUM_ONLY
+  NO_EXPERIENCE_REQ
+}
+
+enum BacklogPolicy {
+  NO_ACTIVE
+  NO_HISTORY
+  ALLOWED_WITH_LIMIT
+  UNRESTRICTED
+  UNKNOWN
+}
+
+enum CgpaScale {
+  SCALE_10_0
+  SCALE_4_0
+  SCALE_7_0
+  SCALE_UNKNOWN
+}
+
+enum AcademicEvaluationMode {
+  SINGLE_CRITERION
+  DISJUNCTIVE_OR
+  CONJUNCTIVE_AND
+}
+
+enum CriterionType {
+  ROLE_CATEGORY
+  GRADUATION_BATCH
+  RELATIVE_COHORT
+  DEGREE
+  BRANCH
+  EXPERIENCE_MONTHS
+  CGPA
+  PERCENTAGE
+  BACKLOG
+  CITIZENSHIP
+  WORK_AUTHORIZATION
+}
+
+enum ExtractionMethod {
+  ATS_METADATA_FIELD
+  REGEX_DETERMINISTIC
+  NLP_LLM_STRUCTURED
+  MANUAL_AUDIT_OVERRIDE
+}
+
+model OpportunityEligibility {
+  id                       String                           @id @default(uuid())
+  opportunityId            String                           @unique
+  opportunity              Opportunity                      @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  category                 EarlyCareerCategory              @default(UNKNOWN)
+  confidence               Float                            @default(0.0)
+  overallVerificationLevel VerificationLevel                @default(UNVERIFIED)
+  explanation              String                           @default("")
+
+  // Experience requirements
+  experienceConstraint     ConstraintState                  @default(UNKNOWN)
+  experienceBoundType      ExperienceBoundType?
+  minExperienceMonths      Int?
+  maxExperienceMonths      Int?
+
+  // Graduation batch criteria
+  batchConstraint          ConstraintState                  @default(UNKNOWN)
+  eligibleBatches          Int[]
+  relativeCohorts          String[]
+
+  // Academic requirements
+  academicConstraint       ConstraintState                  @default(UNKNOWN)
+  academicEvaluationMode   AcademicEvaluationMode?
+  minCgpa                  Float?
+  cgpaScale                CgpaScale?
+  minPercentage            Float?
+  backlogPolicy            BacklogPolicy                    @default(UNKNOWN)
+  maxActiveBacklogs        Int?
+
+  // Degrees and Branches
+  degreeConstraint         ConstraintState                  @default(UNKNOWN)
+  eligibleDegrees          String[]
+  branchConstraint         ConstraintState                  @default(UNKNOWN)
+  eligibleBranches         String[]
+
+  // Conflicts and Provenance
+  hasConflict              Boolean                          @default(false)
+  conflictDetails          String[]
+  sourceContentHash        String
+  classifierVersion        String                           @default("early-career-v1")
+
+  createdAt                DateTime                         @default(now())
+  updatedAt                DateTime                         @updatedAt
+
+  evidenceRecords          OpportunityEligibilityEvidence[]
+
+  @@index([category])
+  @@index([overallVerificationLevel])
+  @@index([experienceConstraint])
+  @@index([batchConstraint])
+  @@index([academicConstraint])
+  @@index([sourceContentHash])
+}
+
+model OpportunityEligibilityEvidence {
+  id                String                         @id @default(uuid())
+  eligibilityId     String
+  eligibility       OpportunityEligibility         @relation(fields: [eligibilityId], references: [id], onDelete: Cascade)
+
+  criterion         CriterionType
+  rawValue          String
+  normalizedValue   Json
+  confidence        Float
+  verificationLevel VerificationLevel              @default(UNVERIFIED)
+  extractionMethod  ExtractionMethod
+  sourceField       String
+  hasConflict       Boolean                        @default(false)
+  conflictReason    String?
+  sourceContentHash String
+  extractorVersion  String                         @default("early-career-v1")
+
+  // Temporal & Versioning Self-Relation
+  isActive          Boolean                        @default(true)
+  supersededAt      DateTime?
+  supersededById    String?
+  supersededBy      OpportunityEligibilityEvidence?  @relation("EvidenceHistory", fields: [supersededById], references: [id])
+  supersedes        OpportunityEligibilityEvidence[] @relation("EvidenceHistory")
+
+  // Audit metadata
+  auditedByAdminId  String?
+  auditedAt         DateTime?
+  auditNotes        String?
+
+  createdAt         DateTime                       @default(now())
+
+  @@index([eligibilityId, criterion, isActive])
+  @@index([sourceContentHash])
+  @@index([extractorVersion])
+  @@index([extractionMethod])
 }

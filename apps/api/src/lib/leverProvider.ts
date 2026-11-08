@@ -1,6 +1,7 @@
-import type { ExternalJob, OpportunityProvider } from './opportunityProvider';
+import type { ExternalJob, OpportunityProvider, ProviderFetchStats } from './opportunityProvider';
 import { extractOpportunitySkills } from '../services/opportunitySkillExtractor';
 import { IndiaLocationClassifier } from '../services/indiaLocationClassifier';
+import { cancellableSleep } from './smartRecruitersProvider';
 
 export interface LeverBoardConfig {
   site: string;
@@ -130,23 +131,75 @@ export class LeverProvider implements OpportunityProvider {
     }
   }
 
+  private lastFetchStats: ProviderFetchStats = { successfulSources: [], failedSources: [] };
+  private lastBoardPartialFailure: Map<string, { error: string; offset: number }> = new Map();
+
   getBoardConfigs(): readonly LeverBoardConfig[] {
     return this.boards;
   }
 
-  async fetch(): Promise<ExternalJob[]> {
+  getLastFetchStats(): ProviderFetchStats {
+    return this.lastFetchStats;
+  }
+
+  async fetch(signal?: AbortSignal): Promise<ExternalJob[]> {
+    if (signal?.aborted) {
+      throw new Error(`[LeverProvider] Operation aborted before starting fetch`);
+    }
+
+    this.lastFetchStats = { successfulSources: [], partialSources: [], failedSources: [] };
+    this.lastBoardPartialFailure.clear();
     const allJobs: ExternalJob[] = [];
 
     for (const board of this.boards) {
+      if (signal?.aborted) {
+        throw new Error(`[LeverProvider] Operation aborted during board iteration`);
+      }
+
       try {
-        const boardJobs = await this.fetchBoard(board);
+        const boardJobs = await this.fetchBoard(board, signal);
         allJobs.push(...boardJobs);
+
+        const partial = this.lastBoardPartialFailure.get(board.site);
+        if (partial) {
+          if (!this.lastFetchStats.partialSources) {
+            this.lastFetchStats.partialSources = [];
+          }
+          this.lastFetchStats.partialSources.push(board.site);
+          this.lastFetchStats.failedSources.push({
+            source: board.site,
+            error: partial.error,
+            partial: true,
+            failedOffset: partial.offset,
+          });
+        } else {
+          this.lastFetchStats.successfulSources.push(board.site);
+        }
       } catch (error) {
+        if (signal?.aborted) {
+          throw error;
+        }
+        const errMsg = error instanceof Error ? error.message : String(error);
+        this.lastFetchStats.failedSources.push({
+          source: board.site,
+          error: errMsg,
+          partial: false,
+          failedOffset: 0,
+        });
         console.error(
           `[LeverProvider] Failed to fetch board "${board.site}" (${board.companyName}):`,
-          error instanceof Error ? error.message : error,
+          errMsg,
         );
       }
+    }
+
+    const totalAttempted = this.boards.length;
+    const totalSuccessful = this.lastFetchStats.successfulSources.length;
+    const totalPartial = this.lastFetchStats.partialSources?.length ?? 0;
+    if (totalAttempted > 0 && totalSuccessful === 0 && totalPartial === 0) {
+      throw new Error(
+        `All ${totalAttempted} configured Lever boards failed: ${this.lastFetchStats.failedSources.map((f) => `${f.source} (${f.error})`).join('; ')}`,
+      );
     }
 
     return allJobs;
@@ -159,21 +212,33 @@ export class LeverProvider implements OpportunityProvider {
     site: string,
     limit: number,
     skip: number,
+    signal?: AbortSignal,
   ): Promise<LeverJobItem[]> {
+    if (signal?.aborted) {
+      throw new Error(`[LeverProvider] Request aborted before page fetch for "${site}"`);
+    }
+
     const url = `https://api.lever.co/v0/postings/${encodeURIComponent(site)}?mode=json&limit=${encodeURIComponent(limit)}&skip=${encodeURIComponent(skip)}`;
 
     let attempts = 0;
     const maxAttempts = 1 + this.maxRetries;
 
     while (attempts < maxAttempts) {
+      if (signal?.aborted) {
+        throw new Error(`[LeverProvider] Request aborted during retry loop for "${site}"`);
+      }
+
       attempts++;
       try {
+        const timeoutSignal = AbortSignal.timeout(this.timeoutMs);
+        const combinedSignal = signal ? AbortSignal.any([timeoutSignal, signal]) : timeoutSignal;
+
         const response = await fetch(url, {
           headers: {
             'Accept': 'application/json',
             'User-Agent': 'Career-Intelligence-Engine/1.0',
           },
-          signal: AbortSignal.timeout(this.timeoutMs),
+          signal: combinedSignal,
         });
 
         if (response.status === 429) {
@@ -184,7 +249,7 @@ export class LeverProvider implements OpportunityProvider {
               ? retryAfterSec * 1000
               : 1000 * Math.pow(2, attempts - 1);
             console.warn(`[LeverProvider] Rate limited (429) on "${site}" (skip=${skip}). Retrying in ${delayMs}ms (attempt ${attempts}/${maxAttempts})...`);
-            await new Promise((r) => setTimeout(r, delayMs));
+            await cancellableSleep(delayMs, signal);
             continue;
           }
           throw new Error(`Lever API rate limit (429) exceeded for "${site}" after ${attempts} attempts`);
@@ -194,7 +259,7 @@ export class LeverProvider implements OpportunityProvider {
           if (response.status >= 500 && attempts < maxAttempts) {
             const delayMs = 1000 * Math.pow(2, attempts - 1);
             console.warn(`[LeverProvider] Server error (${response.status}) on "${site}" (skip=${skip}). Retrying in ${delayMs}ms...`);
-            await new Promise((r) => setTimeout(r, delayMs));
+            await cancellableSleep(delayMs, signal);
             continue;
           }
           throw new Error(`Lever API error for "${site}": ${response.status} ${response.statusText}`);
@@ -208,12 +273,15 @@ export class LeverProvider implements OpportunityProvider {
 
         return data as LeverJobItem[];
       } catch (error) {
+        if (signal?.aborted) {
+          throw error;
+        }
         if (attempts >= maxAttempts) {
           throw error;
         }
         const delayMs = 1000 * Math.pow(2, attempts - 1);
         console.warn(`[LeverProvider] Request error for "${site}" (skip=${skip}): ${error instanceof Error ? error.message : error}. Retrying in ${delayMs}ms...`);
-        await new Promise((r) => setTimeout(r, delayMs));
+        await cancellableSleep(delayMs, signal);
       }
     }
 
@@ -230,7 +298,7 @@ export class LeverProvider implements OpportunityProvider {
    * 3. Early-terminates if India-eligible quota satisfies maxJobsPerBoard or end of listings is reached.
    * 4. Retains discovered India jobs first, then non-India jobs up to maxJobsPerBoard.
    */
-  async fetchBoard(board: LeverBoardConfig): Promise<ExternalJob[]> {
+  async fetchBoard(board: LeverBoardConfig, signal?: AbortSignal): Promise<ExternalJob[]> {
     let skip = 0;
     let requestCount = 0;
     const scannedIndiaJobs: LeverJobItem[] = [];
@@ -242,30 +310,40 @@ export class LeverProvider implements OpportunityProvider {
       requestCount < this.maxRequestsPerBoard &&
       (scannedIndiaJobs.length + scannedOtherJobs.length) < this.maxScanLimit
     ) {
+      if (signal?.aborted) {
+        throw new Error(`[LeverProvider] Operation aborted during pagination for "${board.site}"`);
+      }
+
       const remainingScanCapacity = this.maxScanLimit - (scannedIndiaJobs.length + scannedOtherJobs.length);
       const batchLimit = Math.min(this.pageSize, remainingScanCapacity);
       if (batchLimit <= 0) break;
 
       let batch: LeverJobItem[];
       try {
-        batch = await this.fetchPage(board.site, batchLimit, skip);
+        batch = await this.fetchPage(board.site, batchLimit, skip, signal);
         requestCount++;
       } catch (err) {
+        if (signal?.aborted) {
+          throw err;
+        }
         if (scannedIndiaJobs.length + scannedOtherJobs.length > 0) {
+          const errMsg = err instanceof Error ? err.message : String(err);
           console.warn(
-            `[LeverProvider] Error fetching page at skip=${skip} for "${board.site}": ${err instanceof Error ? err.message : err}. Continuing with ${scannedIndiaJobs.length + scannedOtherJobs.length} scanned jobs.`,
+            `[LeverProvider] Error fetching page at skip=${skip} for "${board.site}": ${errMsg}. Continuing with ${scannedIndiaJobs.length + scannedOtherJobs.length} scanned jobs.`,
           );
+          this.lastBoardPartialFailure.set(board.site, { error: errMsg, offset: skip });
           break;
         }
         throw err;
       }
 
-      if (!Array.isArray(batch) || batch.length === 0) {
+      const safeBatch = Array.isArray(batch) ? batch : [];
+      if (safeBatch.length === 0) {
         hasMore = false;
         break;
       }
 
-      for (const job of batch) {
+      for (const job of safeBatch) {
         let locationStr: string | undefined = job.categories?.location?.trim() || undefined;
         if (!locationStr && Array.isArray(job.categories?.allLocations) && job.categories.allLocations.length > 0) {
           locationStr = job.categories.allLocations[0]?.trim() || undefined;
@@ -281,7 +359,7 @@ export class LeverProvider implements OpportunityProvider {
       }
 
       // If the batch returned fewer than requested, we reached the end of the ATS board
-      if (batch.length < batchLimit) {
+      if (safeBatch.length < batchLimit) {
         hasMore = false;
         break;
       }
@@ -291,11 +369,11 @@ export class LeverProvider implements OpportunityProvider {
         break;
       }
 
-      skip += batch.length;
+      skip += safeBatch.length;
 
       // Polite rate-limit delay between paginated requests
       if (hasMore && this.rateLimitDelayMs > 0 && requestCount < this.maxRequestsPerBoard) {
-        await new Promise((r) => setTimeout(r, this.rateLimitDelayMs));
+        await cancellableSleep(this.rateLimitDelayMs, signal);
       }
     }
 

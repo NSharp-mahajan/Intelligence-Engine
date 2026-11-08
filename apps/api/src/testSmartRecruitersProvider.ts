@@ -1,6 +1,7 @@
 import {
   SmartRecruitersProvider,
   buildSmartRecruitersFullDescription,
+  isConfirmedPublicPostingUrl,
   type SmartRecruitersJobItem,
   type SmartRecruitersPostingDetail,
   type SmartRecruitersCompanyConfig,
@@ -142,34 +143,95 @@ async function runTests() {
     assert(transformed.requiredSkills?.includes('JavaScript') === true, 'Extracts "JavaScript" skill');
   }
 
-  // Test 2: Application URL Handling (No Blind ${postingUrl}/apply, Verified Public Posting Fallback, HTTP/HTTPS Only)
-  console.log('\nTest 2: Application URL Handling (No Blind /apply Construction, HTTP/HTTPS Only)');
+  // Test 2: URL Correctness & Trustworthy Resolution (No Fabrication, No API Endpoints, HTTP/HTTPS Only)
+  console.log('\nTest 2: Trustworthy URL Resolution & Non-Fabrication');
   {
     const company: SmartRecruitersCompanyConfig = { companyIdentifier: 'Freshworks', companyName: 'Freshworks' };
     const provider = new SmartRecruitersProvider({ companies: [company] });
 
-    // 2a: Detail has applyUrl missing -> uses verified postingUrl (does NOT append /apply)
-    const itemNoApply: SmartRecruitersJobItem = { id: 'job-no-apply', name: 'Backend Engineer' };
-    const detailNoApply: SmartRecruitersPostingDetail = {
-      id: 'job-no-apply',
-      postingUrl: 'https://jobs.smartrecruiters.com/Freshworks/job-no-apply',
+    // 2.1: Valid API-provided posting URL
+    const item1: SmartRecruitersJobItem = { id: 'job-1', name: 'Software Engineer' };
+    const detail1: SmartRecruitersPostingDetail = {
+      id: 'job-1',
+      postingUrl: 'https://jobs.smartrecruiters.com/Freshworks/job-1-software-engineer',
     };
-    const tNoApply = provider.transformSmartRecruitersJob(itemNoApply, detailNoApply, company);
-    assert(tNoApply.applicationUrl === 'https://jobs.smartrecruiters.com/Freshworks/job-no-apply', 'Uses verified postingUrl when applyUrl is missing (no blind /apply appended)');
-    assert(!tNoApply.applicationUrl.endsWith('/apply'), 'Does NOT append /apply blindly to postingUrl');
+    const t1 = provider.transformSmartRecruitersJob(item1, detail1, company);
+    assert(t1.sourceUrl === 'https://jobs.smartrecruiters.com/Freshworks/job-1-software-engineer', 'Case 1: Uses valid API-provided postingUrl as sourceUrl');
+    assert(t1.applicationUrl === 'https://jobs.smartrecruiters.com/Freshworks/job-1-software-engineer', 'Case 1: Uses valid postingUrl as applicationUrl when applyUrl is omitted');
 
-    // 2b: Malicious or invalid applyUrl -> rejects and falls back to verified public postingUrl
-    const detailBadApply: SmartRecruitersPostingDetail = {
-      id: 'job-bad-apply',
+    // 2.2: Valid public URL from a confirmed reference (e.g. custom public careers portal in item.ref)
+    const item2: SmartRecruitersJobItem = {
+      id: 'job-2',
+      name: 'Frontend Engineer',
+      ref: 'https://jobs.smartrecruiters.com/Freshworks/ref-job-2-frontend',
+    };
+    const t2 = provider.transformSmartRecruitersJob(item2, null, company);
+    assert(t2.sourceUrl === 'https://jobs.smartrecruiters.com/Freshworks/ref-job-2-frontend', 'Case 2: Uses confirmed public URL in item.ref as sourceUrl');
+    assert(t2.applicationUrl === 'https://jobs.smartrecruiters.com/Freshworks/ref-job-2-frontend', 'Case 2: Uses confirmed public URL in item.ref as applicationUrl');
+
+    // 2.3: Invalid or relative API reference (e.g. api.smartrecruiters.com/v1/... or relative /v1/postings/...)
+    const item3a: SmartRecruitersJobItem = {
+      id: 'job-3a',
+      name: 'Backend Engineer',
+      ref: 'https://api.smartrecruiters.com/v1/companies/Freshworks/postings/744000158852264',
+    };
+    const t3a = provider.transformSmartRecruitersJob(item3a, null, company);
+    assert(t3a.sourceUrl === undefined, 'Case 3a: Rejects REST API endpoint in item.ref and does not set sourceUrl');
+    assert(t3a.applicationUrl === '', 'Case 3a: Rejects REST API endpoint in item.ref and does not set applicationUrl');
+
+    const item3b: SmartRecruitersJobItem = {
+      id: 'job-3b',
+      name: 'Data Scientist',
+      ref: '/v1/companies/Freshworks/postings/12345',
+    };
+    const t3b = provider.transformSmartRecruitersJob(item3b, null, company);
+    assert(t3b.sourceUrl === undefined, 'Case 3b: Rejects relative API path in item.ref');
+    assert(t3b.applicationUrl === '', 'Case 3b: Rejects relative API path for applicationUrl');
+
+    // 2.4: Missing posting URL (no detail.postingUrl, and item.ref is missing or API reference)
+    const item4: SmartRecruitersJobItem = {
+      id: 'job-4',
+      name: 'DevOps Engineer',
+      ref: 'https://api.smartrecruiters.com/v1/companies/Freshworks/postings/99999',
+    };
+    const detail4: SmartRecruitersPostingDetail = {
+      id: 'job-4',
+      name: 'DevOps Engineer',
+      // postingUrl omitted
+    };
+    const t4 = provider.transformSmartRecruitersJob(item4, detail4, company);
+    assert(t4.sourceUrl === undefined, 'Case 4: sourceUrl is omitted when no trustworthy posting URL exists');
+
+    // 2.5: Invalid application URL (e.g. javascript: or API endpoint in detail.applyUrl)
+    const item5: SmartRecruitersJobItem = { id: 'job-5', name: 'Security Engineer' };
+    const detail5: SmartRecruitersPostingDetail = {
+      id: 'job-5',
+      postingUrl: 'https://jobs.smartrecruiters.com/Freshworks/job-5-security',
       applyUrl: 'javascript:alert(1)',
-      postingUrl: 'https://jobs.smartrecruiters.com/Freshworks/job-bad-apply',
     };
-    const tBadApply = provider.transformSmartRecruitersJob(itemNoApply, detailBadApply, company);
-    assert(tBadApply.applicationUrl === 'https://jobs.smartrecruiters.com/Freshworks/job-bad-apply', 'Rejects javascript: applyUrl and falls back to verified postingUrl');
+    const t5 = provider.transformSmartRecruitersJob(item5, detail5, company);
+    assert(t5.applicationUrl === 'https://jobs.smartrecruiters.com/Freshworks/job-5-security', 'Case 5: Rejects javascript: applyUrl and falls back to trustworthy postingUrl');
 
-    // 2c: Fallback public posting URL format verification
-    const tFallback = provider.transformSmartRecruitersJob({ id: 'job-fb', name: 'Dev' }, null, company);
-    assert(tFallback.applicationUrl === 'https://jobs.smartrecruiters.com/Freshworks/job-fb', 'Constructs verified public postingUrl when detail is null');
+    const detail5Api: SmartRecruitersPostingDetail = {
+      id: 'job-5',
+      postingUrl: 'https://jobs.smartrecruiters.com/Freshworks/job-5-security',
+      applyUrl: 'https://api.smartrecruiters.com/v1/companies/Freshworks/postings/job-5/apply',
+    };
+    const t5Api = provider.transformSmartRecruitersJob(item5, detail5Api, company);
+    assert(t5Api.applicationUrl === 'https://jobs.smartrecruiters.com/Freshworks/job-5-security', 'Case 5: Rejects API endpoint applyUrl and falls back to trustworthy postingUrl');
+
+    // 2.6: No fabricated application URL when no trustworthy URL exists
+    const item6: SmartRecruitersJobItem = { id: 'job-6', name: 'Product Manager' };
+    const t6 = provider.transformSmartRecruitersJob(item6, null, company);
+    assert(t6.applicationUrl === '', 'Case 6: applicationUrl is empty string (omitted), NOT fabricated');
+    assert(t6.sourceUrl === undefined, 'Case 6: sourceUrl is undefined, NOT fabricated');
+    assert(!t6.applicationUrl?.includes('https://jobs.smartrecruiters.com/Freshworks/job-6'), 'Case 6: Does NOT fabricate https://jobs.smartrecruiters.com/{company}/{id}');
+
+    // Helper direct unit tests
+    assert(isConfirmedPublicPostingUrl('https://jobs.smartrecruiters.com/Freshworks/123-title') === true, 'Helper accepts public candidate job URL');
+    assert(isConfirmedPublicPostingUrl('https://api.smartrecruiters.com/v1/companies/Freshworks/postings/123') === false, 'Helper rejects api.smartrecruiters.com URL');
+    assert(isConfirmedPublicPostingUrl('/relative/path') === false, 'Helper rejects relative path');
+    assert(isConfirmedPublicPostingUrl('javascript:void(0)') === false, 'Helper rejects javascript: protocol');
   }
 
   // Test 3: Correct Employment-Type Classification (GET, Fresher, Graduate Engineer, Intern, Co-op)
@@ -279,8 +341,8 @@ async function runTests() {
     assert(indiaResults.length === 5, `Discovered and retained all 5 India jobs (actual: ${indiaResults.length})`);
   }
 
-  // Test 5: Early Termination on India Quota Fulfillment
-  console.log('\nTest 5: Early Termination on India Quota Fulfillment');
+  // Test 5: Bounded Scanning Before Top India Quota Selection
+  console.log('\nTest 5: Bounded Scanning Before Top India Quota Selection');
   {
     const page1Items: SmartRecruitersJobItem[] = [];
     for (let i = 0; i < 30; i++) {
@@ -314,8 +376,8 @@ async function runTests() {
       companyName: 'Freshworks',
     });
 
-    assert(provider.pageFetchLog.length === 1, `Terminated after 1 request because India quota (10) was met (actual: ${provider.pageFetchLog.length})`);
-    assert(results.length === 10, `Retained exactly 10 India jobs (actual: ${results.length})`);
+    assert(provider.pageFetchLog.length === 4, `Scanned all available pages up to totalFound (actual requests: ${provider.pageFetchLog.length})`);
+    assert(results.length === 10, `Retained top 10 India jobs based on maxJobsPerBoard quota (actual: ${results.length})`);
   }
 
   // Test 6: Deterministic Job Retention (Newest First, Missing Date Fallback, Stable Ties)
@@ -584,6 +646,182 @@ async function runTests() {
     const deduplicator = new OpportunityDeduplicator();
     const key = deduplicator.generateDeduplicationKey(normalized);
     assert(typeof key === 'string' && key.startsWith('SmartRecruiters'), `Generates valid deduplication key: ${key}`);
+  }
+
+  // Test 12: Partial Pagination Failure Tracking (Page 1 succeeds, Page 2 fails)
+  console.log('\nTest 12: Partial Pagination Failure Tracking');
+  {
+    const compA: SmartRecruitersCompanyConfig = { companyIdentifier: 'PartialCorp', companyName: 'Partial Corp' };
+    const provider = new MockSmartRecruitersProvider({
+      companies: [compA],
+      pageSize: 2,
+      maxScanLimit: 10,
+      fetchDetailsForRetained: false,
+      rateLimitDelayMs: 0,
+    });
+
+    provider.mockPages.set('PartialCorp', (offset) => {
+      if (offset === 0) {
+        return {
+          offset: 0,
+          limit: 2,
+          totalFound: 10,
+          content: [
+            { id: 'part-1', name: 'Software Engineer', location: { fullLocation: 'Bengaluru, India' } },
+            { id: 'part-2', name: 'DevOps Engineer', location: { fullLocation: 'Pune, India' } },
+          ],
+        };
+      }
+      throw new Error('Connection reset on page 2 (offset 2)');
+    });
+
+    const jobs = await provider.fetch();
+    assert(jobs.length === 2, `Retained 2 jobs collected before page 2 failure (actual: ${jobs.length})`);
+    const stats = provider.getLastFetchStats();
+    assert(!stats.successfulSources.includes('PartialCorp'), 'PartialCorp is NOT listed in successfulSources');
+    assert(Boolean(stats.partialSources?.includes('PartialCorp')), 'PartialCorp is listed in partialSources');
+    const failureRecord = stats.failedSources.find((f) => f.source === 'PartialCorp');
+    assert(failureRecord?.partial === true, 'failedSources record has partial: true');
+    assert(failureRecord?.failedOffset === 2, `failedSources record tracks failedOffset: 2 (actual: ${failureRecord?.failedOffset})`);
+  }
+
+  // Test 13: Cancellation in fetchPostingDetail vs Non-Cancellation Fallback
+  console.log('\nTest 13: Cancellation in fetchPostingDetail vs Non-Cancellation Fallback');
+  {
+    // 13a: Real fetchPostingDetail rethrows abort error
+    const provider = new SmartRecruitersProvider({
+      companies: [{ companyIdentifier: 'Freshworks', companyName: 'Freshworks' }],
+      rateLimitDelayMs: 0,
+    });
+
+    const controller = new AbortController();
+    controller.abort(new Error('Detail fetch aborted'));
+
+    let threwAbort = false;
+    try {
+      // Access protected fetchPostingDetail
+      await (provider as any).fetchPostingDetail('Freshworks', 'test-job', controller.signal);
+    } catch (err) {
+      threwAbort = true;
+      assert(err instanceof Error && err.message.includes('aborted'), 'fetchPostingDetail propagates abort error');
+    }
+    assert(threwAbort, 'fetchPostingDetail does not swallow abort signal into null');
+
+    // 13b: HTTP 404 / 500 returns null and allows fallback to list item
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async () => {
+        return new Response('Not Found', { status: 404 });
+      }) as any;
+
+      const detail = await (provider as any).fetchPostingDetail('Freshworks', 'missing-job');
+      assert(detail === null, 'HTTP 404 returns null for fallback to list item data');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }
+
+  // Test 14: Newest-First Across Scan Window (Page 2 Newer India Jobs Retained Over Page 1)
+  console.log('\nTest 14: Newest-First Across Scan Window (Page 2 Newer Jobs Priority)');
+  {
+    const compA: SmartRecruitersCompanyConfig = { companyIdentifier: 'ScanCorp', companyName: 'Scan Corp' };
+    const provider = new MockSmartRecruitersProvider({
+      companies: [compA],
+      pageSize: 3,
+      maxJobsPerBoard: 3,
+      maxScanLimit: 10,
+      fetchDetailsForRetained: false,
+      rateLimitDelayMs: 0,
+    });
+
+    // Page 1 has 3 older India jobs
+    // Page 2 has 2 newer India jobs
+    provider.mockPages.set('ScanCorp', (offset) => {
+      if (offset === 0) {
+        return {
+          offset: 0,
+          limit: 3,
+          totalFound: 5,
+          content: [
+            { id: 'old-1', name: 'Old Role 1', releasedDate: '2026-01-01T00:00:00.000Z', location: { fullLocation: 'Delhi, India' } },
+            { id: 'old-2', name: 'Old Role 2', releasedDate: '2026-01-02T00:00:00.000Z', location: { fullLocation: 'Delhi, India' } },
+            { id: 'old-3', name: 'Old Role 3', releasedDate: '2026-01-03T00:00:00.000Z', location: { fullLocation: 'Delhi, India' } },
+          ],
+        };
+      } else if (offset === 3) {
+        return {
+          offset: 3,
+          limit: 3,
+          totalFound: 5,
+          content: [
+            { id: 'new-1', name: 'New Role 1', releasedDate: '2026-10-25T00:00:00.000Z', location: { fullLocation: 'Delhi, India' } },
+            { id: 'new-2', name: 'New Role 2', releasedDate: '2026-10-26T00:00:00.000Z', location: { fullLocation: 'Delhi, India' } },
+          ],
+        };
+      }
+      return { offset, limit: 3, totalFound: 5, content: [] };
+    });
+
+    const results = await provider.fetchCompany(compA);
+    assert(results.length === 3, `Retains top 3 jobs based on maxJobsPerBoard (actual: ${results.length})`);
+    assert(results[0].id === 'new-2', `Top job is newest-first new-2 (actual: ${results[0].id})`);
+    assert(results[1].id === 'new-1', `Second job is newest-first new-1 (actual: ${results[1].id})`);
+    assert(results[2].id === 'old-3', `Third job is newest of older batch old-3 (actual: ${results[2].id})`);
+  }
+
+  // Test 15: Independent Request-Bound Enforcement & Sleep Cancellation
+  console.log('\nTest 15: Independent Request-Bound Enforcement & Sleep Cancellation');
+  {
+    // 15a: Detail request limit strictly enforced
+    const compA: SmartRecruitersCompanyConfig = { companyIdentifier: 'DetailBoundCorp', companyName: 'Detail Bound Corp' };
+    const provider = new MockSmartRecruitersProvider({
+      companies: [compA],
+      pageSize: 10,
+      maxJobsPerBoard: 10,
+      fetchDetailsForRetained: true,
+      maxDetailRequests: 2, // Only allow 2 detail requests even though 5 jobs retained
+      rateLimitDelayMs: 0,
+    });
+
+    let detailCalls = 0;
+    (provider as any).fetchPostingDetail = async () => {
+      detailCalls++;
+      return null;
+    };
+
+    provider.mockPages.set('DetailBoundCorp', () => {
+      return {
+        offset: 0,
+        limit: 10,
+        totalFound: 5,
+        content: [
+          { id: 'd-1', name: 'Role 1', location: { fullLocation: 'Delhi, India' } },
+          { id: 'd-2', name: 'Role 2', location: { fullLocation: 'Delhi, India' } },
+          { id: 'd-3', name: 'Role 3', location: { fullLocation: 'Delhi, India' } },
+          { id: 'd-4', name: 'Role 4', location: { fullLocation: 'Delhi, India' } },
+          { id: 'd-5', name: 'Role 5', location: { fullLocation: 'Delhi, India' } },
+        ],
+      };
+    });
+
+    const results = await provider.fetchCompany(compA);
+    assert(results.length === 5, `Retained all 5 jobs (actual: ${results.length})`);
+    assert(detailCalls === 2, `detailRequests strictly bounded by maxDetailRequests=2 (actual calls: ${detailCalls})`);
+
+    // 15b: Cancellable sleep aborts immediately and cleans up
+    const { cancellableSleep } = await import('./lib/smartRecruitersProvider');
+    const controller = new AbortController();
+    const sleepPromise = cancellableSleep(5000, controller.signal);
+    controller.abort(new Error('Sleep cancelled'));
+
+    let sleepAborted = false;
+    try {
+      await sleepPromise;
+    } catch (err) {
+      sleepAborted = true;
+      assert(err instanceof Error && err.message.includes('Operation aborted'), 'cancellableSleep throws abort error');
+    }
+    assert(sleepAborted, 'cancellableSleep rejects immediately without waiting 5000ms');
   }
 
   // Summary

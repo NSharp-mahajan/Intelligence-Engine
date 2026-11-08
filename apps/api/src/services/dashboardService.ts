@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { MatchingService } from './matchingService';
 import { isProfileComplete } from '../lib/profileCompleteness';
+import { getNonTestOpportunityWhere } from '../lib/opportunityFilters';
 
 export interface DashboardRecommendation {
   id: string;
@@ -105,6 +106,7 @@ export class DashboardService {
     // Exclude opportunities whose explicit deadline has passed; retain unknown deadlines (null)
     const structuredOpportunities = await this.prisma.opportunity.findMany({
       where: {
+        ...getNonTestOpportunityWhere(),
         opportunitySkills: {
           some: {},
         },

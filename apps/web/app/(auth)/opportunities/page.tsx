@@ -667,6 +667,19 @@ function OpportunitiesContent() {
 
   return (
     <div style={pageStyles.wrap} className="animate-fade-in">
+      {/* Navigation Sub-Tabs */}
+      <nav aria-label="Discovery sub-navigation" style={pageStyles.navTabs}>
+        <Link href="/opportunities" style={pageStyles.activeTab}>
+          All Opportunities
+        </Link>
+        <Link href="/opportunities/early-career" style={pageStyles.tab}>
+          Early Opportunities
+        </Link>
+        <Link href="/opportunities/india" style={pageStyles.tab}>
+          India Opportunities
+        </Link>
+      </nav>
+
       {/* Page Header */}
       <header style={pageStyles.header}>
         <h1 style={pageStyles.title}>Opportunity Discovery</h1>
@@ -674,6 +687,29 @@ function OpportunitiesContent() {
           Find roles that match your skills, projects, and career direction.
         </p>
       </header>
+
+      {/* Early Opportunities Callout Banner */}
+      <div style={pageStyles.earlyBanner}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={pageStyles.earlyBannerIcon}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2.2">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+              <path d="M6 12v5c3 3 9 3 12 0v-5" />
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontWeight: 650, fontSize: '0.9375rem', color: '#9a3412' }}>
+              Are you a Student or Recent Graduate?
+            </div>
+            <div style={{ fontSize: '0.8125rem', color: '#c2410c' }}>
+              Discover verified internships, fresher, and entry-level roles with automated candidate eligibility evaluation.
+            </div>
+          </div>
+        </div>
+        <Link href="/opportunities/early-career" style={pageStyles.earlyBannerBtn}>
+          Explore Early Opportunities →
+        </Link>
+      </div>
 
       {/* Discovery Controls / Toolbar */}
       <div style={pageStyles.toolbar}>
@@ -955,6 +991,73 @@ const pageStyles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     gap: '0',
+  },
+  navTabs: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    borderBottom: '1px solid var(--border-light)',
+    paddingBottom: '14px',
+    marginBottom: '22px',
+  },
+  activeTab: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '6px 14px',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: '#fff7ed',
+    color: '#c2410c',
+    fontSize: '0.875rem',
+    fontWeight: 650,
+    textDecoration: 'none',
+    border: '1px solid #fed7aa',
+  },
+  tab: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '6px 14px',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: 'var(--bg-surface)',
+    color: 'var(--text-secondary)',
+    fontSize: '0.875rem',
+    fontWeight: 500,
+    textDecoration: 'none',
+    border: '1px solid var(--border-light)',
+    transition: 'all var(--transition-fast)',
+  },
+  earlyBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '12px',
+    backgroundColor: '#fff7ed',
+    border: '1px solid #fed7aa',
+    borderRadius: 'var(--radius-md)',
+    padding: '12px 16px',
+    marginBottom: '20px',
+  },
+  earlyBannerIcon: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '36px',
+    height: '36px',
+    borderRadius: '8px',
+    backgroundColor: '#ffedd5',
+    flexShrink: 0,
+  },
+  earlyBannerBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '6px 14px',
+    borderRadius: 'var(--radius-md)',
+    backgroundColor: '#ea580c',
+    color: '#ffffff',
+    fontSize: '0.8125rem',
+    fontWeight: 600,
+    textDecoration: 'none',
+    whiteSpace: 'nowrap',
   },
   header: {
     marginBottom: '20px',

@@ -17,6 +17,7 @@ export interface SmartRecruitersProviderOptions {
   rateLimitDelayMs?: number;
   maxRetries?: number;
   fetchDetailsForRetained?: boolean;
+  maxDetailRequests?: number;
 }
 
 export interface SmartRecruitersLocation {
@@ -121,6 +122,33 @@ export function isValidHttpUrl(urlStr?: string | null): boolean {
 }
 
 /**
+ * Determines whether a given URL is a confirmed, trustworthy public candidate-facing URL,
+ * rejecting API endpoints, relative paths, internal service URLs, and non-HTTP/HTTPS protocols.
+ */
+export function isConfirmedPublicPostingUrl(urlStr?: string | null): boolean {
+  if (!isValidHttpUrl(urlStr)) return false;
+  try {
+    const parsed = new URL(urlStr!.trim());
+    const hostname = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname.toLowerCase();
+
+    // Reject SmartRecruiters internal/REST API endpoints
+    if (
+      hostname === 'api.smartrecruiters.com' ||
+      hostname.endsWith('.api.smartrecruiters.com') ||
+      pathname.startsWith('/v1/') ||
+      pathname.includes('/api/')
+    ) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Parses a date value into an epoch millisecond timestamp, returning null if invalid/missing.
  */
 export function parsePublicationTimestamp(dateStr?: string | Date | null): number | null {
@@ -172,15 +200,17 @@ export async function cancellableSleep(ms: number, signal?: AbortSignal): Promis
     throw new Error('Operation aborted');
   }
   return new Promise<void>((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
+    let timeoutId: NodeJS.Timeout | null = null;
+    const onAbort = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', onAbort);
+      reject(new Error('Operation aborted'));
+    };
+
+    timeoutId = setTimeout(() => {
       signal?.removeEventListener('abort', onAbort);
       resolve();
     }, ms);
-
-    const onAbort = () => {
-      clearTimeout(timeoutId);
-      reject(new Error('Operation aborted'));
-    };
 
     signal?.addEventListener('abort', onAbort, { once: true });
   });
@@ -242,6 +272,8 @@ export class SmartRecruitersProvider implements OpportunityProvider {
   private readonly rateLimitDelayMs: number;
   private readonly maxRetries: number;
   private readonly fetchDetailsForRetained: boolean;
+  private readonly maxDetailRequests?: number;
+  private readonly lastCompanyPartialFailure: Map<string, { error: string; offset: number }> = new Map();
   private lastFetchStats: ProviderFetchStats = { successfulSources: [], failedSources: [] };
 
   constructor(options?: SmartRecruitersProviderOptions | SmartRecruitersCompanyConfig[]) {
@@ -255,6 +287,7 @@ export class SmartRecruitersProvider implements OpportunityProvider {
       this.rateLimitDelayMs = 150;
       this.maxRetries = 2;
       this.fetchDetailsForRetained = true;
+      this.maxDetailRequests = 25;
     } else {
       this.companies = options?.companies && options.companies.length > 0
         ? options.companies
@@ -267,6 +300,7 @@ export class SmartRecruitersProvider implements OpportunityProvider {
       this.rateLimitDelayMs = options?.rateLimitDelayMs !== undefined ? options.rateLimitDelayMs : 150;
       this.maxRetries = options?.maxRetries !== undefined ? options.maxRetries : 2;
       this.fetchDetailsForRetained = options?.fetchDetailsForRetained ?? true;
+      this.maxDetailRequests = options?.maxDetailRequests !== undefined ? options.maxDetailRequests : this.maxJobsPerBoard;
     }
   }
 
@@ -283,7 +317,8 @@ export class SmartRecruitersProvider implements OpportunityProvider {
       throw new Error(`[SmartRecruitersProvider] Operation aborted before starting fetch`);
     }
 
-    this.lastFetchStats = { successfulSources: [], failedSources: [] };
+    this.lastFetchStats = { successfulSources: [], partialSources: [], failedSources: [] };
+    this.lastCompanyPartialFailure.clear();
     const allJobs: ExternalJob[] = [];
 
     for (const company of this.companies) {
@@ -294,13 +329,33 @@ export class SmartRecruitersProvider implements OpportunityProvider {
       try {
         const companyJobs = await this.fetchCompany(company, signal);
         allJobs.push(...companyJobs);
-        this.lastFetchStats.successfulSources.push(company.companyIdentifier);
+
+        const partial = this.lastCompanyPartialFailure.get(company.companyIdentifier);
+        if (partial) {
+          if (!this.lastFetchStats.partialSources) {
+            this.lastFetchStats.partialSources = [];
+          }
+          this.lastFetchStats.partialSources.push(company.companyIdentifier);
+          this.lastFetchStats.failedSources.push({
+            source: company.companyIdentifier,
+            error: partial.error,
+            partial: true,
+            failedOffset: partial.offset,
+          });
+        } else {
+          this.lastFetchStats.successfulSources.push(company.companyIdentifier);
+        }
       } catch (error) {
         if (signal?.aborted) {
           throw error;
         }
         const errMsg = error instanceof Error ? error.message : String(error);
-        this.lastFetchStats.failedSources.push({ source: company.companyIdentifier, error: errMsg });
+        this.lastFetchStats.failedSources.push({
+          source: company.companyIdentifier,
+          error: errMsg,
+          partial: false,
+          failedOffset: 0,
+        });
         console.error(
           `[SmartRecruitersProvider] Failed to fetch company "${company.companyIdentifier}" (${company.companyName}):`,
           errMsg,
@@ -308,10 +363,13 @@ export class SmartRecruitersProvider implements OpportunityProvider {
       }
     }
 
-    // If every configured company failed, propagate an error so the scheduler records a failure
-    if (this.companies.length > 0 && this.lastFetchStats.failedSources.length === this.companies.length) {
+    // If every configured company failed completely (no successful and no partial sources), propagate an error
+    const totalAttempted = this.companies.length;
+    const totalSuccessful = this.lastFetchStats.successfulSources.length;
+    const totalPartial = this.lastFetchStats.partialSources?.length ?? 0;
+    if (totalAttempted > 0 && totalSuccessful === 0 && totalPartial === 0) {
       throw new Error(
-        `All ${this.companies.length} configured SmartRecruiters companies failed: ${this.lastFetchStats.failedSources.map((f) => `${f.source} (${f.error})`).join('; ')}`,
+        `All ${totalAttempted} configured SmartRecruiters companies failed: ${this.lastFetchStats.failedSources.map((f) => `${f.source} (${f.error})`).join('; ')}`,
       );
     }
 
@@ -434,11 +492,16 @@ export class SmartRecruitersProvider implements OpportunityProvider {
       });
 
       if (!response.ok) {
+        console.warn(`[SmartRecruitersProvider] Detail request failed for "${postingId}" with status ${response.status}`);
         return null;
       }
 
       return (await response.json()) as SmartRecruitersPostingDetail;
-    } catch {
+    } catch (err) {
+      if (signal?.aborted) {
+        throw new Error(`[SmartRecruitersProvider] Detail request aborted for "${postingId}"`);
+      }
+      console.warn(`[SmartRecruitersProvider] Error fetching posting detail for "${postingId}":`, err instanceof Error ? err.message : err);
       return null;
     }
   }
@@ -475,9 +538,11 @@ export class SmartRecruitersProvider implements OpportunityProvider {
           throw err;
         }
         if (scannedIndiaJobs.length + scannedOtherJobs.length > 0) {
+          const errMsg = err instanceof Error ? err.message : String(err);
           console.warn(
-            `[SmartRecruitersProvider] Error fetching page at offset=${offset} for "${company.companyIdentifier}": ${err instanceof Error ? err.message : err}. Continuing with scanned jobs.`,
+            `[SmartRecruitersProvider] Error fetching page at offset=${offset} for "${company.companyIdentifier}": ${errMsg}. Continuing with scanned jobs.`,
           );
+          this.lastCompanyPartialFailure.set(company.companyIdentifier, { error: errMsg, offset });
           break;
         }
         throw err;
@@ -499,11 +564,6 @@ export class SmartRecruitersProvider implements OpportunityProvider {
         }
       }
 
-      // If India quota already met and maxJobsPerBoard is configured, we can stop scanning
-      if (this.maxJobsPerBoard && scannedIndiaJobs.length >= this.maxJobsPerBoard) {
-        break;
-      }
-
       if (batch.length < batchLimit) {
         hasMore = false;
         break;
@@ -516,7 +576,7 @@ export class SmartRecruitersProvider implements OpportunityProvider {
 
       offset += batch.length;
 
-      if (this.rateLimitDelayMs > 0 && hasMore) {
+      if (this.rateLimitDelayMs > 0 && hasMore && requestCount < this.maxRequestsPerBoard) {
         await cancellableSleep(this.rateLimitDelayMs, signal);
       }
     }
@@ -537,16 +597,20 @@ export class SmartRecruitersProvider implements OpportunityProvider {
       retained = [...selectedIndia, ...selectedOther];
     }
 
-    // Transform retained items into ExternalJob
+    // Transform retained items into ExternalJob with bounded detail requests
     const results: ExternalJob[] = [];
+    let detailCount = 0;
+    const maxDetails = this.maxDetailRequests ?? this.maxJobsPerBoard ?? 25;
+
     for (const item of retained) {
       if (signal?.aborted) {
         throw new Error(`[SmartRecruitersProvider] Operation aborted during detail retrieval for "${company.companyIdentifier}"`);
       }
 
       let detail: SmartRecruitersPostingDetail | null = null;
-      if (this.fetchDetailsForRetained && item.id) {
+      if (this.fetchDetailsForRetained && item.id && detailCount < maxDetails) {
         detail = await this.fetchPostingDetail(company.companyIdentifier, item.id, signal);
+        detailCount++;
       }
       results.push(this.transformSmartRecruitersJob(item, detail, company));
     }
@@ -665,16 +729,29 @@ export class SmartRecruitersProvider implements OpportunityProvider {
     // Publication date
     const postedDate = detail?.releasedDate || item.releasedDate || undefined;
 
-    // Direct application URL & Public job URL with HTTP/HTTPS validation:
-    // Prefer actual API-provided applyUrl. If unavailable, use verified public posting URL.
-    // Do not blindly construct `${postingUrl}/apply`.
-    const defaultPostingUrl = `https://jobs.smartrecruiters.com/${encodeURIComponent(company.companyIdentifier)}/${encodeURIComponent(item.id)}`;
-    const candidatePostingUrl = detail?.postingUrl || item.ref || defaultPostingUrl;
-    const validPostingUrl = isValidHttpUrl(candidatePostingUrl) ? candidatePostingUrl.trim() : defaultPostingUrl;
+    // Direct application URL & Public job URL resolution:
+    // 1. Prefer trustworthy API-provided public posting URL from detail (e.g. detail.postingUrl).
+    // 2. Use item.ref ONLY if confirmed to be a public candidate-facing URL (not an API endpoint like api.smartrecruiters.com/v1/...).
+    // 3. Do not invent or assume constructed URLs exist merely because they parse.
+    // 4. If no trustworthy public posting URL exists, omit the URL rather than invent one.
+    // 5. Keep sourceUrl and applicationUrl semantically correct.
+    let validPostingUrl: string | undefined = undefined;
+    if (isConfirmedPublicPostingUrl(detail?.postingUrl)) {
+      validPostingUrl = detail!.postingUrl!.trim();
+    } else if (isConfirmedPublicPostingUrl(item.ref)) {
+      validPostingUrl = item.ref!.trim();
+    }
 
-    const validApplyUrl = isValidHttpUrl(detail?.applyUrl) ? detail!.applyUrl!.trim() : undefined;
-    const applicationUrl = validApplyUrl || validPostingUrl;
-    const sourceUrl = validPostingUrl;
+    // Application URL: prefer trustworthy API-provided applyUrl (e.g. detail.applyUrl).
+    // If unavailable or invalid, use the trustworthy public posting URL.
+    // If neither exists, omit the URL (empty string in ExternalJob, never fabricate).
+    let validApplyUrl: string | undefined = undefined;
+    if (isConfirmedPublicPostingUrl(detail?.applyUrl)) {
+      validApplyUrl = detail!.applyUrl!.trim();
+    }
+
+    const applicationUrl = validApplyUrl || validPostingUrl || '';
+    const sourceUrl = validPostingUrl || undefined;
 
     return {
       id: item.id ? String(item.id) : undefined,

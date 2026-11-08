@@ -73,6 +73,7 @@ export interface ProviderRunResult {
   attempts: number;
   error?: string;
   failedSources?: ProviderSourceFailure[];
+  partialSources?: string[];
 }
 
 export interface IngestionRunSummary {
@@ -297,10 +298,8 @@ export class IngestionScheduler {
 
       try {
         const stats = await this.ingestor.ingest(provider, abortController.signal);
-        clearTimeout(timeoutId);
         return { stats, attempts };
       } catch (err) {
-        clearTimeout(timeoutId);
         if (isTimedOut) {
           lastError = new Error(`Timeout: Ingestion for ${provider.name} exceeded ${this.config.timeoutMs}ms`);
         } else {
@@ -312,6 +311,8 @@ export class IngestionScheduler {
           console.warn(`[IngestionScheduler] Provider "${provider.name}" attempt ${attempts} failed: ${lastError.message}. Retrying in ${delay}ms...`);
           await new Promise((r) => setTimeout(r, delay));
         }
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
 
@@ -419,6 +420,7 @@ export class IngestionScheduler {
 
         const fetchStats = providerInstance.getLastFetchStats?.();
         const failedSources = fetchStats?.failedSources;
+        const partialSources = fetchStats?.partialSources;
 
         if (error) {
           failureCount++;
@@ -433,6 +435,7 @@ export class IngestionScheduler {
             attempts,
             error: error.message,
             ...(failedSources && failedSources.length > 0 ? { failedSources } : {}),
+            ...(partialSources && partialSources.length > 0 ? { partialSources } : {}),
           };
           console.error(`[IngestionScheduler] Provider "${providerInstance.name}" FAILED after ${attempts} attempts: ${error.message}`);
         } else {
@@ -447,6 +450,7 @@ export class IngestionScheduler {
             durationMs,
             attempts,
             ...(failedSources && failedSources.length > 0 ? { failedSources } : {}),
+            ...(partialSources && partialSources.length > 0 ? { partialSources } : {}),
           };
           if (failedSources && failedSources.length > 0) {
             console.warn(

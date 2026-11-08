@@ -523,3 +523,70 @@ export class IndiaLocationClassifier {
     return (originalLocation || '').trim() || 'Unknown';
   }
 }
+
+/**
+ * Detects if a job description explicitly provides international visa sponsorship
+ * (e.g. H-1B, OPT/CPT, relocation/visa sponsorship for international graduates).
+ */
+export function detectVisaSponsorship(description?: string | null): boolean {
+  if (!description) return false;
+  const desc = description.toLowerCase();
+
+  // Negative indicators take strict precedence
+  const hasNegative = /\b(no\s+visa\s+sponsorship|not\s+(?:providing|offering)\s+visa\s+sponsorship|will\s+not\s+(?:provide|offer|sponsor)|unable\s+to\s+sponsor|without\s+(?:requiring\s+)?sponsorship|must\s+be\s+legally\s+authorized\s+to\s+work\s+in\s+the\s+u\.?s\.?\s+without\s+sponsorship|must\s+be\s+authorized\s+to\s+work\s+without\s+sponsorship|not\s+eligible\s+for\s+sponsorship|us\s+citizenship\s+required|active\s+security\s+clearance|security\s+check\s+\(sc\))\b/i.test(desc);
+  if (hasNegative) return false;
+
+  // Positive indicators
+  const hasPositive = /\b(visa\s+sponsorship|sponsorship\s+is\s+available|will\s+provide\s+visa\s+sponsorship|can\s+provide\s+visa\s+sponsorship|willing\s+to\s+sponsor|opt(?:\/cpt)?\s+sponsorship|h-?1b\s+sponsorship|sponsorship\s+available)\b/i.test(desc);
+  return hasPositive;
+}
+
+export type GeographicScope = 'INDIA_DOMESTIC' | 'INTERNATIONAL_SPONSORED' | 'INTERNATIONAL_OTHER';
+
+export interface OpportunityGeographicDetails {
+  isIndiaEligible: boolean;
+  classification: IndiaEligibility;
+  hasVisaSponsorship: boolean;
+  geoScope: GeographicScope;
+  locationLabel: string;
+}
+
+/**
+ * Categorizes an opportunity's geographic availability for Indian candidates:
+ * - INDIA_DOMESTIC: Located in an Indian city or confirmed remote for India.
+ * - INTERNATIONAL_SPONSORED: Overseas, but explicitly confirms visa sponsorship.
+ * - INTERNATIONAL_OTHER: Overseas with no confirmed visa sponsorship or ambiguous residency restrictions.
+ */
+export function getOpportunityGeographicScope(opp: {
+  title?: string | null;
+  location?: string | null;
+  workMode?: string | null;
+  description?: string | null;
+}): OpportunityGeographicDetails {
+  const result = IndiaLocationClassifier.classify(
+    opp.location,
+    opp.title,
+    opp.description,
+    opp.workMode
+  );
+  const hasVisa = !result.isIndiaEligible && detectVisaSponsorship(opp.description);
+
+  let geoScope: GeographicScope = 'INTERNATIONAL_OTHER';
+  if (result.isIndiaEligible) {
+    geoScope = 'INDIA_DOMESTIC';
+  } else if (hasVisa) {
+    geoScope = 'INTERNATIONAL_SPONSORED';
+  }
+
+  const locationLabel = result.isIndiaEligible
+    ? IndiaLocationClassifier.formatNormalizedLocation(result, opp.location)
+    : (opp.location || 'International');
+
+  return {
+    isIndiaEligible: result.isIndiaEligible,
+    classification: result.classification,
+    hasVisaSponsorship: hasVisa,
+    geoScope,
+    locationLabel,
+  };
+}

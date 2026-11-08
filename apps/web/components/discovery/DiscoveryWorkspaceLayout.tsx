@@ -20,6 +20,7 @@ export function DiscoveryWorkspaceLayout({ children, user, onSignOut }: Discover
 
   const isAllOpps = pathname === '/opportunities';
   const isIndiaOpps = pathname === '/opportunities/india';
+  const isEarlyOpps = pathname === '/opportunities/early-career';
 
   return (
     <div style={styles.layout}>
@@ -33,6 +34,13 @@ export function DiscoveryWorkspaceLayout({ children, user, onSignOut }: Discover
               style={isAllOpps ? styles.activeNavItem : styles.navItem}
             >
               All Opportunities
+            </Link>
+            <Link
+              href="/opportunities/early-career"
+              aria-current={isEarlyOpps ? 'page' : undefined}
+              style={isEarlyOpps ? styles.activeNavItem : styles.navItem}
+            >
+              Early Opportunities
             </Link>
             <Link
               href="/opportunities/india"

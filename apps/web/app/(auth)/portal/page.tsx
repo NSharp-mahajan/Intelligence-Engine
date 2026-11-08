@@ -135,6 +135,34 @@ export default function PortalOverviewPage() {
         </Card>
       </div>
 
+      {/* EARLY CAREER DISCOVERY BANNER */}
+      <div style={styles.earlyDiscoveryBanner}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          <div style={styles.earlyBannerIconWrapper}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2.2">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+              <path d="M6 12v5c3 3 9 3 12 0v-5" />
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#9a3412' }}>
+              Looking for Internships or Entry-Level Roles?
+            </div>
+            <div style={{ fontSize: '0.8125rem', color: '#c2410c' }}>
+              Explore the dedicated Early Opportunities feed with candidate eligibility evaluation for 2024–2027 graduates.
+            </div>
+          </div>
+        </div>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => router.push('/opportunities/early-career')}
+          style={{ backgroundColor: '#ea580c', borderColor: '#ea580c', flexShrink: 0 }}
+        >
+          Explore Early Opportunities →
+        </Button>
+      </div>
+
       {/* MAIN TWO-COLUMN WORKSPACE (40% Left / 60% Right) */}
       <div style={styles.workspaceGrid}>
         
@@ -450,6 +478,28 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-primary)',
     lineHeight: 1,
     letterSpacing: '-0.03em',
+  },
+  earlyDiscoveryBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '14px',
+    backgroundColor: '#fff7ed',
+    border: '1px solid #fed7aa',
+    borderRadius: 'var(--radius-md)',
+    padding: '16px 20px',
+    marginBottom: '1.75rem',
+  },
+  earlyBannerIconWrapper: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '40px',
+    height: '40px',
+    borderRadius: '8px',
+    backgroundColor: '#ffedd5',
+    flexShrink: 0,
   },
   workspaceGrid: {
     display: 'grid',

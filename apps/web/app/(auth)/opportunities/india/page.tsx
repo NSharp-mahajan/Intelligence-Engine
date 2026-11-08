@@ -32,7 +32,24 @@ function formatSourceName(source: string | null | undefined): string {
   return source.charAt(0).toUpperCase() + source.slice(1);
 }
 
+function isValidHttpUrl(urlStr?: string | null): boolean {
+  if (!urlStr || typeof urlStr !== 'string') return false;
+  const trimmed = urlStr.trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 // ─── Filter Constants ────────────────────────────────────────────────────────
+
+const JOB_FAMILY_OPTIONS = [
+  { label: 'All Job Families', value: '' },
+  { label: 'Software Engineering', value: 'SOFTWARE_ENGINEERING' },
+];
 
 const CITY_OPTIONS = [
   { label: 'All India', value: '' },
@@ -236,7 +253,7 @@ function OpportunityCard({ opp }: { opp: Opportunity }) {
             <span>View details</span>
             <span style={cardStyles.arrowIcon}>→</span>
           </Link>
-          {opp.applicationUrl && (
+          {isValidHttpUrl(opp.applicationUrl) && (
             <a
               href={opp.applicationUrl}
               target="_blank"
@@ -334,6 +351,7 @@ function IndiaOpportunitiesContent() {
   const stage = searchParams.get('stage') || '';
   const workMode = searchParams.get('workMode') || '';
   const skill = searchParams.get('skill') || '';
+  const jobFamily = searchParams.get('jobFamily') || '';
   const matchFilter = searchParams.get('matchFilter') || '';
   const sort = searchParams.get('sort') || '';
 
@@ -404,6 +422,7 @@ function IndiaOpportunitiesContent() {
       stage: null,
       workMode: null,
       skill: null,
+      jobFamily: null,
       matchFilter: null,
       sort: null,
       page: '1',
@@ -417,7 +436,7 @@ function IndiaOpportunitiesContent() {
   };
 
   const hasActiveFilters = Boolean(
-    search || city || stage || workMode || skill || matchFilter || sort
+    search || city || stage || workMode || skill || jobFamily || matchFilter || sort
   );
 
   useEffect(() => {
@@ -437,6 +456,7 @@ function IndiaOpportunitiesContent() {
         if (stage) params.set('stage', stage);
         if (workMode) params.set('workMode', workMode);
         if (skill) params.set('skill', skill);
+        if (jobFamily) params.set('jobFamily', jobFamily);
         if (matchFilter) params.set('matchFilter', matchFilter);
         if (sort) params.set('sort', sort);
 
@@ -465,7 +485,7 @@ function IndiaOpportunitiesContent() {
     return () => {
       cancelled = true;
     };
-  }, [page, search, city, stage, workMode, skill, matchFilter, sort]);
+  }, [page, search, city, stage, workMode, skill, jobFamily, matchFilter, sort]);
 
   const handleNext = () => {
     if (data && page < data.pagination.totalPages) {
@@ -643,6 +663,22 @@ function IndiaOpportunitiesContent() {
 
         {/* Filter Dropdowns Row */}
         <div style={pageStyles.filtersRow}>
+          {/* Job Family Filter */}
+          <div style={pageStyles.selectWrap}>
+            <select
+              value={jobFamily}
+              onChange={(e) => handleFilterChange('jobFamily', e.target.value)}
+              style={pageStyles.select}
+              aria-label="Job Family"
+            >
+              {JOB_FAMILY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* City Filter */}
           <div style={pageStyles.selectWrap}>
             <select
@@ -775,6 +811,19 @@ function IndiaOpportunitiesContent() {
                   onClick={() => removeSingleFilter('workMode')}
                   style={pageStyles.chipRemoveBtn}
                   aria-label="Remove work mode filter"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+            {jobFamily && (
+              <span style={pageStyles.filterChip}>
+                Family: {JOB_FAMILY_OPTIONS.find((f) => f.value === jobFamily)?.label || jobFamily}
+                <button
+                  type="button"
+                  onClick={() => removeSingleFilter('jobFamily')}
+                  style={pageStyles.chipRemoveBtn}
+                  aria-label="Remove job family filter"
                 >
                   ✕
                 </button>
