@@ -10,7 +10,9 @@ export function Card({ children, style }: CardProps) {
     <div style={{
       backgroundColor: 'var(--bg-surface)',
       borderRadius: 'var(--radius-lg)',
-      border: '1px solid var(--border-light)',
+      borderWidth: '1px',
+      borderStyle: 'solid',
+      borderColor: 'var(--border-light)',
       boxShadow: 'var(--shadow-sm)',
       overflow: 'hidden',
       display: 'flex',

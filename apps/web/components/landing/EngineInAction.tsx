@@ -357,7 +357,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   engineCore: {
     backgroundColor: 'var(--bg-dark)',
-    border: '2px solid var(--border-dark)',
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: 'var(--border-dark)',
     borderRadius: 'var(--radius-lg)',
     padding: '1.5rem',
     width: '100%',

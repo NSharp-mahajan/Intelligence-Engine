@@ -772,7 +772,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 550,
     padding: '0.1875rem 0.5rem',
     borderRadius: '4px',
-    border: '1px solid',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: 'transparent',
   },
   chipCheck: {
     fontSize: '0.6875rem',

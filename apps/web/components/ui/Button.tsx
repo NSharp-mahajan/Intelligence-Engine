@@ -28,7 +28,9 @@ export function Button({
     width: fullWidth ? '100%' : 'auto',
     fontFamily: 'inherit',
     outline: 'none',
-    border: '1px solid transparent',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: 'transparent',
   };
 
   const sizeStyles = {
