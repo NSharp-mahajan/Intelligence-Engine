@@ -35,3 +35,6 @@ Thumbs.db
 *.dump
 backups/
 *.pdf
+
+# Scratch / local audits
+scratch/

@@ -709,13 +709,32 @@ export default function OpportunityDetailPage({ params }: PageProps) {
 
               {isValidHttpUrl(opportunity.applicationUrl) && (
                 <div style={styles.ctaContainer}>
-                  <Button 
-                    fullWidth 
-                    variant="primary" 
-                    onClick={() => window.open(opportunity.applicationUrl, '_blank', 'noopener,noreferrer')}
+                  <a
+                    href={opportunity.applicationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '100%',
+                      padding: '0.5rem 1rem',
+                      fontSize: '0.9375rem',
+                      fontWeight: 500,
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'var(--accent-primary)',
+                      color: 'var(--text-inverse)',
+                      border: '1px solid var(--accent-primary)',
+                      textDecoration: 'none',
+                      transition: 'background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast)',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      boxSizing: 'border-box',
+                    }}
+                    className="opp-apply-btn"
                   >
                     Apply on {formatSourceName(opportunity.source)} ↗
-                  </Button>
+                  </a>
                 </div>
               )}
             </CardBody>

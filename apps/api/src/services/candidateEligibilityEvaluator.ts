@@ -164,37 +164,134 @@ function normalizeDegree(raw?: string | null): string | null {
   return collapsed || null;
 }
 
-const BRANCH_CANONICAL_MAP: Record<string, string[]> = {
-  CSE: ['CSE', 'CS', 'COMPUTER SCIENCE', 'COMPUTER SCIENCE ENGINEERING', 'COMPUTER SCIENCE AND ENGINEERING'],
-  IT: ['IT', 'INFORMATION TECHNOLOGY'],
-  ECE: ['ECE', 'ELECTRONICS', 'ELECTRONICS AND COMMUNICATION', 'ELECTRONICS & COMMUNICATION'],
-  EEE: ['EEE', 'ELECTRICAL', 'ELECTRICAL AND ELECTRONICS', 'ELECTRICAL & ELECTRONICS'],
-  MECH: ['MECH', 'MECHANICAL', 'MECHANICAL ENGINEERING'],
-  CIVIL: ['CIVIL', 'CIVIL ENGINEERING'],
-  DATA_SCIENCE: ['DATA SCIENCE', 'DS', 'DATA ANALYTICS'],
-  AI_ML: ['AI', 'ML', 'AI ML', 'ARTIFICIAL INTELLIGENCE'],
+export const BRANCH_CANONICAL_MAP: Record<string, string[]> = {
+  CSE: [
+    'CSE',
+    'CS',
+    'COMPUTER SCIENCE',
+    'COMPUTER SCIENCE ENGINEERING',
+    'COMPUTER SCIENCE AND ENGINEERING',
+    'COMPUTER ENGINEERING',
+    'SOFTWARE ENGINEERING',
+  ],
+  IT: [
+    'IT',
+    'INFORMATION TECHNOLOGY',
+    'INFORMATION TECH',
+    'INFO TECH',
+  ],
+  COMPUTER_SCIENCE_IT: [
+    'COMPUTER SCIENCE IT',
+    'COMPUTER SCIENCE AND IT',
+    'COMPUTER SCIENCE AND INFORMATION TECHNOLOGY',
+    'COMPUTER SCIENCE INFORMATION TECHNOLOGY',
+    'CS IT',
+    'CSE IT',
+    'CS AND IT',
+    'CSE AND IT',
+    'COMPUTER SCIENCE OR IT',
+  ],
+  ECE: [
+    'ECE',
+    'ELECTRONICS',
+    'ELECTRONICS AND COMMUNICATION',
+    'ELECTRONICS COMMUNICATIONS',
+    'ELECTRONICS AND COMMUNICATIONS',
+    'ELECTRONICS & COMMUNICATION',
+    'ELECTRONICS COMM',
+    'TELECOM',
+    'TELECOMMUNICATION',
+  ],
+  EEE: [
+    'EEE',
+    'ELECTRICAL',
+    'ELECTRICAL ENGINEERING',
+    'ELECTRICAL AND ELECTRONICS',
+    'ELECTRICAL & ELECTRONICS',
+  ],
+  MECH: [
+    'MECH',
+    'MECHANICAL',
+    'MECHANICAL ENGINEERING',
+  ],
+  CIVIL: [
+    'CIVIL',
+    'CIVIL ENGINEERING',
+  ],
+  DATA_SCIENCE: [
+    'DATA SCIENCE',
+    'DS',
+    'DATA ANALYTICS',
+  ],
+  AI_ML: [
+    'AI',
+    'ML',
+    'AI ML',
+    'ARTIFICIAL INTELLIGENCE',
+    'MACHINE LEARNING',
+  ],
 };
 
-function normalizeBranch(raw?: string | null): string | null {
-  if (!raw) return null;
-  const upper = raw.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ');
+export function normalizeBranch(raw?: string | null): string | null {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  // 1. Convert underscores, hyphens, slashes, and ampersands into spaces before removing punctuation
+  const spaced = trimmed
+    .toUpperCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/&/g, ' AND ')
+    .replace(/[/]/g, ' ');
+
+  // 2. Remove other non-alphanumeric chars except spaces, collapse multiple spaces
+  const cleaned = spaced.replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return null;
+
+  // 3. Exact match against canonical aliases
   for (const [key, aliases] of Object.entries(BRANCH_CANONICAL_MAP)) {
-    if (aliases.some((a) => a === upper || upper.includes(a))) {
-      return key;
+    for (const alias of aliases) {
+      if (cleaned === alias) {
+        return key;
+      }
     }
   }
-  return upper || null;
+
+  // 4. Word-boundary match for compound branch names
+  for (const [key, aliases] of Object.entries(BRANCH_CANONICAL_MAP)) {
+    for (const alias of aliases) {
+      const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(^|\\s)${escaped}(\\s|$)`);
+      if (regex.test(cleaned)) {
+        return key;
+      }
+    }
+  }
+
+  return cleaned;
 }
 
-function branchesMatch(candidateBranch: string, eligibleBranches: string[]): boolean {
+export function branchesMatch(candidateBranch: string, eligibleBranches: string[]): boolean {
   const normCandidate = normalizeBranch(candidateBranch);
   if (!normCandidate) return false;
 
   for (const b of eligibleBranches) {
+    if (!b || typeof b !== 'string') continue;
     const normEligible = normalizeBranch(b);
-    if (normEligible && normCandidate === normEligible) return true;
-    if (b.toUpperCase().trim() === candidateBranch.toUpperCase().trim()) return true;
+    if (!normEligible) continue;
+
+    // 1. Direct canonical match
+    if (normCandidate === normEligible) return true;
+
+    // 2. Cluster match between broad COMPUTER_SCIENCE_IT and sub-disciplines
+    if (normEligible === 'COMPUTER_SCIENCE_IT' && (normCandidate === 'CSE' || normCandidate === 'IT')) {
+      return true;
+    }
+    if (normCandidate === 'COMPUTER_SCIENCE_IT' && (normEligible === 'CSE' || normEligible === 'IT')) {
+      return true;
+    }
   }
+
   return false;
 }
 

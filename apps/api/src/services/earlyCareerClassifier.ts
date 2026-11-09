@@ -280,8 +280,11 @@ export function extractExperience(
     };
   }
 
+  // Academic / educational duration lookahead to avoid treating university/college progression as professional experience
+  const academicDurationLookahead = '(?!\\s*(?:of\\s+)?(?:university|college|school|undergraduate|postgraduate|degree|academic|study|studies|coursework|education|curriculum)\\b)';
+
   // Range Patterns: Year Ranges (e.g. "0 to 12 months", "1 - 3 years", "0 - 2 years", "1.5 to 3 years")
-  const yearRangeRegex = /\b(\d+(?:\.\d+)?)\s*(?:-|to|\/)\s*(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\b/i;
+  const yearRangeRegex = new RegExp(`\\b(\\d+(?:\\.\\d+)?)\\s*(?:-|to|\\/)\\s*(\\d+(?:\\.\\d+)?)\\s*(?:years?|yrs?)${academicDurationLookahead}\\b`, 'i');
   const yrMatch = text.match(yearRangeRegex);
   if (yrMatch) {
     const minYr = parseFloat(yrMatch[1]);
@@ -305,7 +308,7 @@ export function extractExperience(
   }
 
   // Month Range Patterns (e.g. "0 to 12 months", "0-24 months")
-  const monthRangeRegex = /\b(\d+)\s*(?:-|to|\/)\s*(\d+)\s*(?:months?|mos?)\b/i;
+  const monthRangeRegex = new RegExp(`\\b(\\d+)\\s*(?:-|to|\\/)\\s*(\\d+)\\s*(?:months?|mos?)${academicDurationLookahead}\\b`, 'i');
   const moMatch = text.match(monthRangeRegex);
   if (moMatch) {
     const minM = parseInt(moMatch[1], 10);
@@ -327,7 +330,7 @@ export function extractExperience(
   }
 
   // Maximum Only Patterns (e.g. "up to 1 year", "maximum 12 months", "up to 2 years")
-  const maxYearRegex = /\b(?:up\s*to|maximum|max|less\s*than|not\s*more\s*than)\s*(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\b/i;
+  const maxYearRegex = new RegExp(`\\b(?:up\\s*to|maximum|max|less\\s*than|not\\s*more\\s*than)\\s*(\\d+(?:\\.\\d+)?)\\s*(?:years?|yrs?)${academicDurationLookahead}\\b`, 'i');
   const maxYrMatch = text.match(maxYearRegex);
   if (maxYrMatch) {
     const maxM = Math.round(parseFloat(maxYrMatch[1]) * 12);
@@ -347,7 +350,7 @@ export function extractExperience(
     };
   }
 
-  const maxMonthRegex = /\b(?:up\s*to|maximum|max|less\s*than|not\s*more\s*than)\s*(\d+)\s*(?:months?|mos?)\b/i;
+  const maxMonthRegex = new RegExp(`\\b(?:up\\s*to|maximum|max|less\\s*than|(?:no|not)\\s*more\\s*than)\\s*(\\d+)\\s*(?:months?|mos?)${academicDurationLookahead}\\b`, 'i');
   const maxMoMatch = text.match(maxMonthRegex);
   if (maxMoMatch) {
     const maxM = parseInt(maxMoMatch[1], 10);
@@ -368,7 +371,7 @@ export function extractExperience(
   }
 
   // Minimum Only Patterns (e.g. "min 6 months", "2+ years", "minimum 3 years", "3 to 5 years")
-  const minOnlyMonthRegex = /\b(?:minimum|min|at\s*least)\s*(\d+)\s*(?:months?|mos?)\b/i;
+  const minOnlyMonthRegex = new RegExp(`\\b(?:minimum|min|at\\s*least)\\s*(\\d+)\\s*(?:months?|mos?)${academicDurationLookahead}\\b`, 'i');
   const minMoMatch = text.match(minOnlyMonthRegex);
   if (minMoMatch) {
     const minM = parseInt(minMoMatch[1], 10);
@@ -388,7 +391,7 @@ export function extractExperience(
     };
   }
 
-  const plusYearRegex = /\b(\d+(?:\.\d+)?)\s*\+\s*(?:years?|yrs?)\b/i;
+  const plusYearRegex = new RegExp(`\\b(\\d+(?:\\.\\d+)?)\\s*\\+\\s*(?:years?|yrs?)${academicDurationLookahead}\\b`, 'i');
   const plusMatch = text.match(plusYearRegex);
   if (plusMatch) {
     const minM = Math.round(parseFloat(plusMatch[1]) * 12);
@@ -408,7 +411,7 @@ export function extractExperience(
     };
   }
 
-  const minOnlyYearRegex = /\b(?:minimum|min|at\s*least)\s*(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\b/i;
+  const minOnlyYearRegex = new RegExp(`\\b(?:minimum|min|at\\s*least)\\s*(\\d+(?:\\.\\d+)?)\\s*(?:years?|yrs?)${academicDurationLookahead}\\b`, 'i');
   const minYrMatch = text.match(minOnlyYearRegex);
   if (minYrMatch) {
     const minM = Math.round(parseFloat(minYrMatch[1]) * 12);
@@ -506,6 +509,21 @@ export function extractGraduationBatches(title: string, cleanedDesc: string): Ex
         rawValue: match[0],
         normalized: { batches: [y] },
         confidence: 0.98,
+        field: 'description',
+      });
+    }
+  }
+
+  // "degree obtained by summer 2027" / "graduation by 2027"
+  const batchByRegex = /\b(?:degree|graduation|graduating|obtained)\s*(?:by)?\s*(?:summer|spring|fall|winter)?\s*(20\d{2})\b/gi;
+  while ((match = batchByRegex.exec(sanitizedText)) !== null) {
+    const y = parseInt(match[1], 10);
+    if (y >= 2020 && y <= 2035) {
+      batches.add(y);
+      evidence.push({
+        rawValue: match[0],
+        normalized: { batches: [y] },
+        confidence: 0.95,
         field: 'description',
       });
     }
@@ -642,6 +660,19 @@ export function extractAcademicRequirements(cleanedDesc: string): ExtractedAcade
         confidence: 0.90,
         field: 'description',
       });
+    } else {
+      const prefixCgpaRegex = /\b(?:cgpa|gpa)\s*(?:of\s*|:\s*)?(\d(?:\.\d{1,2})?)(?:\s*(?:and|&)\s*above|\s*\+)?\b/i;
+      const prefixMatch = text.match(prefixCgpaRegex);
+      if (prefixMatch) {
+        extractedCgpa = parseFloat(prefixMatch[1]);
+        detectedScale = extractedCgpa > 4.0 && extractedCgpa <= 10.0 ? 'SCALE_10_0' : 'SCALE_UNKNOWN';
+        evidence.push({
+          rawValue: prefixMatch[0],
+          normalized: { minCgpa: extractedCgpa, cgpaScale: detectedScale },
+          confidence: 0.95,
+          field: 'description',
+        });
+      }
     }
   }
 
@@ -772,7 +803,10 @@ export function extractDegreesAndBranches(text: string): {
   // Degrees
   const degreeRegexes = [
     { name: 'BTECH', regex: /\b(?:b\.?tech|bachelor\s+of\s+technology)\b/i },
-    { name: 'BE', regex: /\b(?:b\.?e\.?|bachelor\s+of\s+engineering)\b/i },
+    {
+      name: 'BE',
+      regex: /\b(?:b\.e\.?|bachelor\s+of\s+engineering|b\.?\s*e\.?\s*(?:\/|or)\s*b\.?tech|b\.?tech\s*(?:\/|or)\s*b\.?\s*e\.?|(?:degree\s+(?:in|of)\s+|bachelor(?:'s)?\s+(?:degree\s+)?(?:in|of)\s+)BE|BE\s+degree)\b/i,
+    },
     { name: 'MTECH', regex: /\b(?:m\.?tech|master\s+of\s+technology)\b/i },
     { name: 'MCA', regex: /\b(?:m\.?c\.?a\.?|master\s+of\s+computer\s+applications)\b/i },
     { name: 'BCA', regex: /\b(?:b\.?c\.?a\.?|bachelor\s+of\s+computer\s+applications)\b/i },
@@ -794,9 +828,9 @@ export function extractDegreesAndBranches(text: string): {
 
   // Branches
   const branchRegexes = [
-    { name: 'COMPUTER_SCIENCE_IT', regex: /\b(?:computer\s*science|cse|it|information\s*technology|software\s*engineering)\b/i },
-    { name: 'ELECTRONICS_COMM', regex: /\b(?:ece|electronics(?:\s*and\s*communication)?|telecom)\b/i },
-    { name: 'ELECTRICAL', regex: /\b(?:eee|electrical(?:\s*engineering)?)\b/i },
+    { name: 'COMPUTER_SCIENCE_IT', regex: /\b(?:computer\s*science|cse|it|information\s*technology|software\s*engineering|circuital)\b/i },
+    { name: 'ECE', regex: /\b(?:ece|electronics(?:\s*and\s*communication)?|telecom|circuital)\b/i },
+    { name: 'EEE', regex: /\b(?:eee|electrical(?:\s*engineering)?|circuital)\b/i },
     { name: 'MECHANICAL', regex: /\b(?:mechanical(?:\s*engineering)?)\b/i },
   ];
 
@@ -1069,8 +1103,8 @@ export class EarlyCareerClassifier {
         hasConflict: false,
       });
     } else if (
-      (hasFresherPhrasing && (exp.isExplicitZero || exp.maxMonths === 0 || exp.constraint === 'UNKNOWN')) ||
-      (batchInfo.batches.length > 0 && exp.isExplicitZero)
+      (hasFresherPhrasing && (exp.isExplicitZero || exp.maxMonths === 0 || exp.constraint === 'UNKNOWN' || (exp.maxMonths !== null && exp.maxMonths <= 24))) ||
+      (batchInfo.batches.length > 0 && (exp.isExplicitZero || (exp.maxMonths !== null && exp.maxMonths <= 24)))
     ) {
       // Tier 4: FRESHER (Requires explicit fresher/campus phrasing AND 0 experience)
       category = 'FRESHER';
