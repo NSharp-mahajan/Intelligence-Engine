@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { MatchingService } from './matchingService';
 import { getProfileCompleteness } from '../lib/profileCompleteness';
 import { getNonTestOpportunityWhere } from '../lib/opportunityFilters';
+import { candidateEligibilityEvaluator, CandidateProfileInput } from './candidateEligibilityEvaluator';
 
 export interface DashboardRecommendation {
   id: string;
@@ -29,6 +30,7 @@ export interface DashboardRecommendation {
     matchedSkills?: string[];
     missingSkills?: string[];
   };
+  eligibilityStatus?: 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'UNKNOWN';
 }
 
 export interface SkillGap {
@@ -58,6 +60,8 @@ export interface DashboardData {
     skillMatchedCount: number;
     /** Backward-compatibility alias — same value as skillMatchedCount */
     matchedOpportunitiesCount: number;
+    totalInventoryCount: number;
+    eligibleOpportunitiesCount: number;
   };
   recommendations: DashboardRecommendation[];
   skillGaps: SkillGap[];
@@ -111,7 +115,7 @@ export class DashboardService {
       return {
         hasProfile: false,
         profileComplete: false,
-        profileCompleteness: { percentage: 0, completedSections: [], missingSections: ['Full name', 'University', 'Target role', 'Graduation year', 'At least one skill', 'At least one project'] },
+        profileCompleteness: { percentage: 0, completedSections: [], missingSections: ['Personal Information', 'Education', 'Career Preferences', 'Skills Inventory', 'Project Evidence'] },
         hasSkillsOrEvidence: false,
         hasStructuredOpportunities: false,
         metrics: {
@@ -119,6 +123,8 @@ export class DashboardService {
           projectsCount: 0,
           skillMatchedCount: 0,
           matchedOpportunitiesCount: 0,
+          totalInventoryCount: 0,
+          eligibleOpportunitiesCount: 0,
         },
         recommendations: [],
         skillGaps: [],
@@ -129,6 +135,20 @@ export class DashboardService {
     const projectsCount = profile.projects?.length || 0;
     const evidenceMap = this.matchingService.buildEvidenceMapFromProfile(profile);
     const hasSkillsOrEvidence = evidenceMap.size > 0;
+
+    // Build candidate input for deterministic eligibility evaluation
+    const candidateInput: CandidateProfileInput = {
+      graduationYear: profile.graduationYear,
+      university: profile.university,
+      degree: profile.degree,
+      branch: profile.branch,
+      cgpa: profile.cgpa,
+      cgpaScale: profile.cgpaScale ? String(profile.cgpaScale) : null,
+      percentage: profile.percentage,
+      activeBacklogs: profile.activeBacklogs,
+      hasBacklogHistory: profile.hasBacklogHistory,
+      experienceMonths: profile.experienceMonths,
+    };
 
     // Compute accurate profile completeness using the enriched criteria
     const completeness = getProfileCompleteness({
@@ -145,6 +165,17 @@ export class DashboardService {
     const currentYear = new Date().getFullYear();
     const isEarlyCareer = !profile.graduationYear ||
       (profile.graduationYear >= currentYear - 1 && profile.graduationYear <= currentYear + 6);
+
+    // Total live inventory count
+    const totalInventoryCount = await this.prisma.opportunity.count({
+      where: {
+        ...getNonTestOpportunityWhere(),
+        OR: [
+          { deadline: null },
+          { deadline: { gte: new Date() } },
+        ],
+      },
+    });
 
     // 2. Fetch all structured opportunities in a single query (avoid N+1)
     // Exclude opportunities whose explicit deadline has passed; retain unknown deadlines (null)
@@ -163,6 +194,11 @@ export class DashboardService {
         opportunitySkills: {
           include: {
             skill: true,
+          },
+        },
+        eligibility: {
+          include: {
+            evidenceRecords: true,
           },
         },
       },
@@ -191,6 +227,8 @@ export class DashboardService {
           projectsCount,
           skillMatchedCount: 0,
           matchedOpportunitiesCount: 0,
+          totalInventoryCount,
+          eligibleOpportunitiesCount: 0,
         },
         recommendations: [],
         skillGaps: [],
@@ -201,10 +239,12 @@ export class DashboardService {
     const scoredList: Array<{
       opp: typeof structuredOpportunities[0];
       match: DashboardRecommendation['match'];
+      eligibilityStatus: 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'UNKNOWN';
     }> = [];
 
     const missingSkillCounts = new Map<string, { skillId: string; skillName: string; count: number }>();
     let skillMatchedCount = 0;
+    let eligibleOpportunitiesCount = 0;
 
     for (const opp of structuredOpportunities) {
       const matchResult = this.matchingService.matchEvidenceToOpportunity(evidenceMap, opp);
@@ -216,6 +256,13 @@ export class DashboardService {
       const missingCount = matchResult.requiredMissing.length + matchResult.preferredMissing.length;
       const totalRequirements = matchedCount + missingCount;
 
+      // Evaluate candidate eligibility
+      let eligibilityStatus: 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'UNKNOWN' = 'UNKNOWN';
+      if (opp.eligibility) {
+        const evalRes = candidateEligibilityEvaluator.evaluate(candidateInput, opp.eligibility);
+        eligibilityStatus = evalRes.overallStatus;
+      }
+
       // Exclude senior/staff roles from both the count and recommendations for early-career candidates
       const isSenior = isSeniorOpportunity(opp);
       if (isEarlyCareer && isSenior) {
@@ -223,6 +270,9 @@ export class DashboardService {
         // but do NOT count in recommendations or matched count
       } else if (matchResult.score > 0) {
         skillMatchedCount++;
+        if (eligibilityStatus === 'ELIGIBLE') {
+          eligibleOpportunitiesCount++;
+        }
 
         // Only opportunities with AT LEAST 3 structured requirements total qualify for Recommendations
         if (totalRequirements >= 3) {
@@ -242,6 +292,7 @@ export class DashboardService {
                 ...matchResult.preferredMissing.map(s => s.skillName),
               ],
             },
+            eligibilityStatus,
           });
         }
       }
@@ -302,6 +353,7 @@ export class DashboardService {
         },
       })),
       match: item.match,
+      eligibilityStatus: item.eligibilityStatus,
     }));
 
     // 5. Aggregate and sort skill gaps
@@ -334,6 +386,8 @@ export class DashboardService {
         projectsCount,
         skillMatchedCount,
         matchedOpportunitiesCount: skillMatchedCount,
+        totalInventoryCount,
+        eligibleOpportunitiesCount,
       },
       recommendations,
       skillGaps,

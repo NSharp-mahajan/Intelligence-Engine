@@ -9,8 +9,8 @@ export type SkillCategoryGroup =
   | 'Backend Development'
   | 'AI & Machine Learning'
   | 'Databases'
-  | 'Developer Tools & Cloud'
-  | 'Other Skills';
+  | 'Developer Tools'
+  | 'Other';
 
 export const SKILL_CATEGORY_ORDER: SkillCategoryGroup[] = [
   'Programming Languages',
@@ -18,8 +18,8 @@ export const SKILL_CATEGORY_ORDER: SkillCategoryGroup[] = [
   'Backend Development',
   'AI & Machine Learning',
   'Databases',
-  'Developer Tools & Cloud',
-  'Other Skills',
+  'Developer Tools',
+  'Other',
 ];
 
 export const CATEGORY_DESCRIPTIONS: Record<SkillCategoryGroup, string> = {
@@ -28,8 +28,8 @@ export const CATEGORY_DESCRIPTIONS: Record<SkillCategoryGroup, string> = {
   'Backend Development': 'Server runtimes, API frameworks, and distributed system components.',
   'AI & Machine Learning': 'Model training, inference frameworks, NLP, and data intelligence.',
   'Databases': 'Relational engines, document stores, in-memory caches, and ORMs.',
-  'Developer Tools & Cloud': 'Containerization, orchestration, cloud providers, and CI/CD pipelines.',
-  'Other Skills': 'Methodologies, architectures, and emerging technologies.',
+  'Developer Tools': 'Containerization, orchestration, cloud providers, and CI/CD pipelines.',
+  'Other': 'Architectural paradigms, software principles, and general competencies.',
 };
 
 const LANGUAGES = new Set([
@@ -96,7 +96,7 @@ export function categorizeSkill(skillName: string, backendCategory?: string): Sk
   if (BACKEND.has(norm)) return 'Backend Development';
   if (AI_ML.has(norm)) return 'AI & Machine Learning';
   if (DATABASES.has(norm)) return 'Databases';
-  if (DEV_TOOLS.has(norm)) return 'Developer Tools & Cloud';
+  if (DEV_TOOLS.has(norm)) return 'Developer Tools';
 
   // Substring or pattern matches
   if (/python|javascript|typescript|golang|rust|kotlin|swift|ruby|php|scala/i.test(norm)) {
@@ -115,13 +115,13 @@ export function categorizeSkill(skillName: string, backendCategory?: string): Sk
     return 'Databases';
   }
   if (/docker|kube|cloud|aws|azure|gcp|linux|git|devops|ci\/cd|pipeline/i.test(norm)) {
-    return 'Developer Tools & Cloud';
+    return 'Developer Tools';
   }
 
   // Supplementary fallback to backend Prisma category
   if (backendCategory === 'LANGUAGE') return 'Programming Languages';
   if (backendCategory === 'FRAMEWORK') return 'Backend Development';
-  if (backendCategory === 'TOOL') return 'Developer Tools & Cloud';
+  if (backendCategory === 'TOOL') return 'Developer Tools';
 
-  return 'Other Skills';
+  return 'Other';
 }

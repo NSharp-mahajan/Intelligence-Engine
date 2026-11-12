@@ -34,33 +34,28 @@ export interface ProfileCompletenessSection {
 export function getProfileCompleteness(profile: ProfileCompletenessInput | null): ProfileCompletenessResult {
   const sections: ProfileCompletenessSection[] = [
     {
-      key: 'name',
-      label: 'Full name',
+      key: 'personal',
+      label: 'Personal Information',
       complete: Boolean(profile?.fullName?.trim()),
     },
     {
-      key: 'university',
-      label: 'University',
-      complete: Boolean(profile?.university?.trim()),
+      key: 'education',
+      label: 'Education',
+      complete: Boolean(profile?.university?.trim() && profile?.graduationYear),
     },
     {
-      key: 'targetRole',
-      label: 'Target role',
+      key: 'career',
+      label: 'Career Preferences',
       complete: Boolean(profile?.targetRole?.trim()),
     },
     {
-      key: 'graduationYear',
-      label: 'Graduation year',
-      complete: Boolean(profile?.graduationYear),
-    },
-    {
       key: 'skills',
-      label: 'At least one skill',
+      label: 'Skills Inventory',
       complete: Array.isArray(profile?.candidateSkills) && (profile?.candidateSkills?.length ?? 0) > 0,
     },
     {
       key: 'projects',
-      label: 'At least one project',
+      label: 'Project Evidence',
       complete: Array.isArray(profile?.projects) && (profile?.projects?.length ?? 0) > 0,
     },
   ];

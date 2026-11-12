@@ -353,6 +353,7 @@ export interface DashboardRecommendation {
     matchedSkills?: string[];
     missingSkills?: string[];
   };
+  eligibilityStatus?: 'ELIGIBLE' | 'NOT_ELIGIBLE' | 'UNKNOWN';
 }
 
 export interface SkillGap {
@@ -376,6 +377,8 @@ export interface DashboardResponse {
     projectsCount: number;
     skillMatchedCount?: number;
     matchedOpportunitiesCount: number;
+    totalInventoryCount?: number;
+    eligibleOpportunitiesCount?: number;
   };
   recommendations: DashboardRecommendation[];
   skillGaps: SkillGap[];

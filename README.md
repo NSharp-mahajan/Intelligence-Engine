@@ -1,6 +1,6 @@
 # Career Intelligence Engine 🚀
 
-Career Intelligence is a deterministic matching and discovery engine for modern engineering careers. It replaces traditional "black box" resume-parsing and noisy job boards with an evidence-based system that scores candidate capabilities directly against real-world engineering roles across top tech employers.
+Career Intelligence is a deterministic matching, eligibility evaluation, and career intelligence platform for modern engineering candidates. It replaces traditional "black box" resume-parsing and noisy job boards with an evidence-based system that scores candidate capabilities directly against real-world engineering roles across top tech employers.
 
 Stop searching. Start matching.
 
@@ -14,6 +14,9 @@ The Intelligence Engine is structured as a full-stack TypeScript monorepo with a
 flowchart TD
     subgraph Frontend [Next.js Web Application]
         UI[App Router & Discovery Workspace]
+        Dash[Career Intelligence Dashboard]
+        MatchUI[3-Column Semantic Match Analysis]
+        EvidUI[Skills & Projects Evidence Workspace]
         BrandUI[Resilient Company Logo Component]
         AuthC[Clerk Auth Client]
     end
@@ -22,6 +25,9 @@ flowchart TD
         API[Express Router]
         AuthS[Clerk Auth Middleware]
         Zod[Zod Validation]
+        MatchSvc[Matching & Evidence Graph Service]
+        EligSvc[Deterministic Eligibility Evaluator]
+        DashSvc[Dashboard Metrics & Recommendation Engine]
         BrandSvc[Company Logo Resolution Service]
         Prisma[Prisma ORM & PostgreSQL Adapters]
     end
@@ -31,12 +37,15 @@ flowchart TD
         GH[Greenhouse Provider]
         LV[Lever Provider]
         JB[Jobicy Provider]
+        Ashby[Ashby Provider]
+        SR[SmartRecruiters Provider]
     end
 
     subgraph External [External APIs & CDNs]
-        ExtGH[(Greenhouse Job Boards)]
-        ExtLV[(Lever Job Boards)]
+        ExtGH[(Greenhouse ATS)]
+        ExtLV[(Lever ATS)]
         ExtJB[(Jobicy API)]
+        ExtAshby[(Ashby ATS)]
         GoogleCDN[(Google Favicon V2 CDN)]
     end
 
@@ -44,22 +53,23 @@ flowchart TD
         PG[(PostgreSQL Database)]
     end
 
-    User((User)) -->|HTTPS| UI
+    User((Candidate)) -->|HTTPS| UI
     UI <-->|JWT / Session| AuthC
     UI -->|REST API| API
+    Dash --> API
+    MatchUI --> API
+    EvidUI --> API
     API <-->|Verify JWT| AuthS
     API -->|Validate| Zod
+    API -->|Evaluate| MatchSvc & EligSvc & DashSvc
     API -->|Resolve Logos| BrandSvc
     BrandSvc -.-> GoogleCDN
     UI -.-> BrandUI
     BrandUI -.-> GoogleCDN
-    API -->|Window Function & Fair Feed Queries| Prisma
+    API -->|Indexed & Windowed Queries| Prisma
     Prisma <--> PG
 
-    Worker -->|Fetch & Paginate| GH & LV & JB
-    GH --> ExtGH
-    LV --> ExtLV
-    JB --> ExtJB
+    Worker -->|Fetch & Paginate| GH & LV & JB & Ashby & SR
     Worker -->|Idempotent Upsert & Deduplicate| Prisma
 ```
 
@@ -70,17 +80,56 @@ flowchart TD
 *   **Language:** TypeScript
 *   **Authentication:** Clerk (`@clerk/nextjs`)
 *   **Branding & Assets:** High-resolution Google Favicon V2 CDN integration with zero-layout-shift fallback tiles
-*   **Styling:** Tokenized CSS-in-JS design system with strict dark/light surfaces and accessible contrast
+*   **Styling:** Scoped CSS-in-JS design tokens with warm off-white surfaces (`#faf9f6`), dark charcoal typography (`#1c1917`), orange primary accent (`#ea580c`), and verified emerald badges (`#15803d`). Zero Tailwind CSS dependency.
 *   **Data Fetching:** Native `fetch` with authenticated JWT Bearer headers and reactive state synchronization
 
 **Backend (`apps/api`)**
 *   **Framework:** [Node.js](https://nodejs.org/) + [Express 5](https://expressjs.com/)
 *   **Language:** TypeScript (Executed via `tsx`)
-*   **Database:** PostgreSQL
+*   **Database:** PostgreSQL 15+
 *   **ORM:** [Prisma 7](https://www.prisma.io/) + `@prisma/adapter-pg`
 *   **Authentication:** Clerk (`@clerk/express`)
 *   **Validation:** Zod for strict runtime schema parsing
 *   **Ingestion & Scheduling:** Asynchronous CLI worker with bounded retries, concurrency locks, and round-robin multi-source providers
+
+---
+
+## 🧠 Core Features & Subsystems
+
+### 1. Career Intelligence Dashboard (`/portal`)
+The central candidate workspace synthesizing real-time career readiness metrics and personalized discovery:
+*   **Disambiguated Intelligence KPIs:** Clearly distinguishes between Total Platform Inventory (2,348+ roles), Skill-Matched Roles, and Verified Eligible Opportunities.
+*   **Transparent Profile Progress:** Evaluates 5 core dimensions: Personal Information, Education (University & Grad Year), Career Direction, Skills Inventory, and Project Evidence. Missing projects correctly caps profile completion at 80%.
+*   **Curated Opportunity Recommendations:** Recommends high-signal roles sorted by match score, strictly filtering out Senior, Staff, and Principal positions for early-career students.
+*   **Market Skill Gap Insights:** Automatically identifies frequently required skills in active market roles that are absent from the candidate's profile.
+
+### 2. Opportunity Match Analysis (`/opportunities/[id]/match`)
+A dedicated, candidate-facing 3-column analysis page inspired by semantic job matching:
+*   **Left Column (Context):** Role summary (company, title, type, location, work mode), structured requirements, and candidate snapshot.
+*   **Center Column (Semantic Alignment):** Overall match score meter, required vs. preferred skills breakdown, and requirement-by-requirement comparison tagged as `✓ Demonstrated in <Project>`, `✓ Documented in skills inventory`, or `✕ Missing`.
+*   **Right Column (Verified Eligibility):** Evaluates candidate criteria (graduation batch, months of professional experience, degree, branch, CGPA, and backlogs) independently from skill match. Confirms the core invariance: **a high skill match score never overrides a verified eligibility failure**.
+
+### 3. Skills & Projects Evidence Workspace (`/evidence`)
+A developer portfolio workspace that grounds technical claims in tangible repository codebases:
+*   **Deterministic Categorization:** Organizes skills into 7 core engineering domains: *Programming Languages*, *Frontend Development*, *Backend Development*, *AI & Machine Learning*, *Databases*, *Developer Tools*, and *Other*.
+*   **Evidence Mapping Matrix:** Side-by-side view distinguishing skills supported by active projects from skills awaiting evidence, with a 1-click modal to link unbacked skills to project repositories.
+*   **Project Portfolio Grid:** Displays project codebases with GitHub repository links, live deployment URLs, and interactive skill tags.
+
+### 4. Balanced Discovery & Early Career Feeds
+*   **Early Opportunities Feed (`/opportunities/early-career`):** Curated early-career roles across Software Engineering, Product & Design, Data & Analytics, Operations & Business.
+*   **India Opportunities Feed (`/opportunities/india`):** Domestic opportunities feed with automated overseas exclusion and employer interleaving.
+*   **Balanced Discovery Feed (`/opportunities`):** Uses a PostgreSQL window function (`ROW_NUMBER() OVER (PARTITION BY source ORDER BY "postedDate" DESC)`) to interleave listings fairly across Greenhouse, Jobicy, Lever, and Ashby, eliminating provider clumping.
+
+### 5. Multi-Source Ingestion Worker
+The ETL worker continuously ingests live roles from top tech employer ATS boards:
+*   **Providers Supported:** Greenhouse, Lever, Jobicy, Ashby, SmartRecruiters.
+*   **Idempotent Upserts:** Matches on `(source, sourceJobId)` with SHA-256 content hashing to eliminate duplicates.
+*   **Deterministic Normalization:** Normalizes experience levels, employment types, work modes, and job families.
+
+```bash
+# Run a one-off ingestion cycle across all active providers
+npx --prefix apps/api tsx src/worker.ts --once --providers=greenhouse,lever,jobicy,ashby --limit=25
+```
 
 ---
 
@@ -89,175 +138,162 @@ flowchart TD
 ```text
 intelligence-engine/
 ├── apps/
-│   ├── api/                          # Express Backend Core
-│   │   ├── prisma/                   # Schema definitions & migrations
+│   ├── api/                          # Express 5 Backend Core
+│   │   ├── prisma/                   # Prisma schema & migrations
 │   │   ├── src/
-│   │   │   ├── routes/               # API route controllers (opportunities, matches)
-│   │   │   ├── services/             # Core business & utility services
-│   │   │   │   ├── companyLogoService.ts   # Domain lookup & Google Favicon V2 resolver
-│   │   │   │   └── ingestionScheduler.ts  # ETL orchestration, retries, and locks
-│   │   │   ├── lib/                  # Providers & data access
-│   │   │   │   ├── greenhouseProvider.ts   # Greenhouse board scraper & normalizer
-│   │   │   │   ├── leverProvider.ts        # Lever board scraper & normalizer
-│   │   │   │   ├── jobicyProvider.ts       # Jobicy API client & normalizer
-│   │   │   │   └── prisma.ts               # Shared Prisma client
-│   │   │   └── worker.ts             # Ingestion CLI worker entry point
+│   │   │   ├── routes/               # Express controllers (auth, dashboard, profile, opportunities, skills)
+│   │   │   ├── services/             # Core business engines
+│   │   │   │   ├── dashboardService.ts            # KPI synthesis & curated recommendations
+│   │   │   │   ├── matchingService.ts             # Deterministic skill matching & evidence map
+│   │   │   │   ├── candidateEligibilityEvaluator.ts # Pure eligibility rules evaluator
+│   │   │   │   ├── companyLogoService.ts          # Domain lookup & Google Favicon V2 resolver
+│   │   │   │   └── earlyCareerClassifier.ts       # Category & experience extractor
+│   │   │   ├── lib/                  # Providers, normalizers, and Prisma client
+│   │   │   └── worker.ts             # Ingestion ETL worker CLI entry point
 │   │   └── package.json
 │   │
-│   └── web/                          # Next.js Frontend Core
+│   └── web/                          # Next.js 16 (App Router) Frontend
 │       ├── app/
-│       │   ├── (auth)/               # Authenticated routes & Discovery Workspace
-│       │   │   ├── opportunities/    # Discovery feed & detailed opportunity view
-│       │   │   └── ...
-│       │   ├── globals.css           # CSS token variables & base animations
-│       │   └── layout.tsx            # Root layout & providers
-│       ├── components/               # Reusable UI primitives
-│       │   ├── CompanyLogo.tsx       # Resilient brand logo with lettermark fallback
-│       │   └── ...
-│       ├── lib/                      # Shared types & utilities
-│       │   ├── companyLogo.ts        # Client-side logo resolver
-│       │   └── types.ts              # Core TypeScript interfaces
+│       │   ├── (auth)/               # Authenticated candidate routes
+│       │   │   ├── portal/           # Main Career Intelligence Dashboard
+│       │   │   ├── evidence/         # Skills & Projects Evidence Workspace
+│       │   │   ├── opportunities/    # Discovery feed, early-career feed, and match analysis
+│       │   │   │   ├── [id]/         # Opportunity Detail View
+│       │   │   │   │   └── match/    # 3-Column Opportunity Match Analysis Page
+│       │   │   │   └── early-career/ # Dedicated Early Opportunities Feed
+│       │   │   └── onboarding/       # Multi-step candidate onboarding
+│       │   ├── globals.css           # Design tokens, CSS variables, base styles
+│       │   └── layout.tsx            # Root layout & Clerk provider
+│       ├── components/               # Reusable UI primitives (Button, Modal, Input, Badge, CompanyLogo)
+│       ├── lib/                      # Client-side API fetchers, types, and skill categories
 │       └── package.json
 ```
-
----
-
-## 🧠 Core Subsystems
-
-### 1. Multi-Source Ingestion & Scheduling Worker
-The ingestion pipeline sources live engineering roles across three distinct provider classes:
-*   **Jobicy:** Public developer and remote job feeds with rich salary and category metadata.
-*   **Greenhouse:** Direct ATS boards across tech employers (e.g. Cloudflare, Databricks, Stripe, Figma, Airbnb).
-*   **Lever:** ATS boards across engineering organizations (e.g. Palantir, Spotify, Netflix, Twitch).
-
-**Key Worker Capabilities:**
-*   **Single-Cycle or Daemon Execution:** Run one-off syncs with `--once` or continuous scheduling via cron intervals.
-*   **Concurrency Locking:** Prevents overlapping runs within the same process.
-*   **Bounded Retries & Exponential Backoff:** Gracefully handles transient network timeouts (default: 30s timeout, 2 retries).
-*   **Non-Fatal Partial Failures:** If one ATS provider fails or rate-limits, successful providers commit their data uninterrupted.
-*   **Idempotent Upsert & Data Preservation:** Matches on `(source, sourceJobId)`, refreshes `lastSeenAt`, and updates mutable fields while preserving existing skills and properties.
-
-```bash
-# Run a one-off ingestion cycle across all providers
-cd apps/api
-npx tsx src/worker.ts --once --providers=jobicy,greenhouse,lever --limit=25
-```
-
-### 2. Balanced Discovery Feed
-Traditional feeds suffer from "provider clumping" where hundreds of consecutive listings from a single source dominate the first pages.
-
-The Intelligence Engine solves this using a **PostgreSQL window function** for default discovery:
-```sql
-SELECT id FROM (
-  SELECT id, source,
-         ROW_NUMBER() OVER (
-           PARTITION BY source
-           ORDER BY "postedDate" DESC NULLS LAST, "createdAt" DESC, id ASC
-         ) as source_rank
-  FROM "Opportunity"
-  WHERE ...
-) ranked
-ORDER BY source_rank ASC, source ASC
-LIMIT $limit OFFSET $offset;
-```
-*   **Round-Robin Interleaving:** Alternates records fairly across Greenhouse, Jobicy, and Lever (`GH #1 -> Jobicy #1 -> Lever #1 -> GH #2 -> ...`).
-*   **Deterministic Pagination:** Pagination with `LIMIT` and `OFFSET` guarantees zero duplicates between adjacent pages.
-*   **Sorting Preservation:** When the user selects explicit sorts (`Newest Posted`, `Oldest Posted`, `Match Score: High to Low`), the engine seamlessly switches to standard indexed ordering.
-
-### 3. Automated Company Branding & Resilient Logos
-Opportunity cards and detail pages render crisp company logos without relying on paid or fragile third-party APIs:
-*   **Google Favicon V2 CDN:** Uses `https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://${domain}&size=128` to fetch official, high-resolution brand icons.
-*   **Curated Alias Dictionary:** Automatically maps known employer aliases (e.g. `Palantir Technologies` $\rightarrow$ `palantir.com`, `Cloudflare, Inc.` $\rightarrow$ `cloudflare.com`, `Ramp` $\rightarrow$ `ramp.com`, `Databricks` $\rightarrow$ `databricks.com`, `Roboflow` $\rightarrow$ `roboflow.com`).
-*   **Dynamic Application URL Fallback:** If the company is unlisted, the resolver parses the root domain from the opportunity's `applicationUrl`.
-*   **Zero-CLS Lettermark Fallback:** If an image fails to load or no domain can be deduced, `<CompanyLogo />` instantly renders an accessible initial tile (`aria-label="<Company> logo"`) with locked dimensions, preventing Cumulative Layout Shift.
-
-### 4. Deterministic Opportunity Matching
-Opportunities are matched against candidate profiles using an evidence-based skill evaluation algorithm:
-*   Extracts required and preferred technical competencies from role specifications.
-*   Scores candidates based on verifiable portfolio evidence, projects, and work experience.
-*   Provides clear, transparent explanations of matched skills and missing prerequisites on each card and detail view.
 
 ---
 
 ## 🚀 Local Development Setup
 
 ### Prerequisites
-*   **Node.js:** v20+ recommended
+*   **Node.js:** v20+ (tested on Node.js v20 and v26)
 *   **npm:** v10+
-*   **Docker Desktop:** For local PostgreSQL instances
+*   **Docker Desktop:** For local PostgreSQL container
 *   **Clerk Account:** For authentication API keys
 
-### Installation & Initialization
+### 1. Installation
+```bash
+# Clone the repository
+git clone https://github.com/NSharp-mahajan/Intelligence-Engine.git
+cd Intelligence-Engine
 
-1.  **Clone the repository**
-    ```bash
-    git clone https://github.com/your-org/intelligence-engine.git
-    cd intelligence-engine
-    ```
+# Install backend dependencies
+cd apps/api && npm install
 
-2.  **Install dependencies**
-    ```bash
-    cd apps/api && npm install
-    cd ../web && npm install
-    ```
+# Install frontend dependencies
+cd ../web && npm install
+cd ../..
+```
 
-3.  **Configure Environment Variables**
-    Create `.env` in `apps/api` and `apps/web` following `.env.example`:
-    ```ini
-    # apps/api/.env
-    DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/intelligence_engine"
-    CLERK_SECRET_KEY="sk_test_..."
-    PORT=3001
-    ```
+### 2. Configure Environment Variables
+Create `.env` in `apps/api` and `apps/web` based on their respective `.env.example` templates:
 
-4.  **Database Migration & Seeding**
-    ```bash
-    cd apps/api
-    npx prisma generate
-    npx prisma db push
-    ```
+```ini
+# apps/api/.env
+PORT=3001
+DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/intelligence_engine?schema=public"
+CLERK_PUBLISHABLE_KEY="pk_test_..."
+CLERK_SECRET_KEY="sk_test_..."
+FRONTEND_URL="http://localhost:3000"
+```
 
-5.  **Run Development Servers**
-    ```bash
-    # Terminal 1: Express API (Port 3001)
-    cd apps/api
-    npm run dev
+```ini
+# apps/web/.env
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_..."
+CLERK_SECRET_KEY="sk_test_..."
+NEXT_PUBLIC_CLERK_SIGN_IN_URL="/login"
+NEXT_PUBLIC_CLERK_SIGN_UP_URL="/register"
+NEXT_PUBLIC_API_URL="http://localhost:3001/api"
+```
 
-    # Terminal 2: Next.js Frontend (Port 3000)
-    cd apps/web
-    npm run dev
-    ```
+### 3. Database Migration
+```bash
+cd apps/api
+npx prisma generate
+npx prisma db push
+```
+
+### 4. Run Development Servers
+```bash
+# Terminal 1: Express API (Port 3001)
+npm --prefix apps/api run dev
+
+# Terminal 2: Next.js Frontend (Port 3000)
+npm --prefix apps/web run dev
+```
+
+Visit [http://localhost:3000](http://localhost:3000) to access the application.
 
 ---
 
-## 🧪 Verification & Testing
+## 🧪 Automated Test Suites & Verification
 
-The monorepo contains comprehensive automated test suites targeting an isolated test database (Port 5433):
+The codebase includes exhaustive automated regression test suites covering all business invariants:
 
 ```bash
-# 1. Company Branding & Balanced Discovery Feed
-cd apps/api
-npx tsx src/testDiscoveryBrandingAndFeed.ts
+# 1. Dashboard Intelligence, Suitability & Recommendation Tests (8 tests)
+npx --prefix apps/api tsx apps/api/src/testDashboard.ts
 
-# 2. Opportunity Matching & Candidate Scoring End-to-End
-npx tsx src/testOpportunityMatchingEndToEnd.ts
+# 2. Targeted Eligibility Defect Remediation Suite (20 tests)
+npx --prefix apps/api tsx apps/api/src/testMilestone3E_TargetedDefects.ts
 
-# 3. Multi-Source Ingestion Pipeline (Jobicy, Greenhouse, Lever)
-npx tsx src/testMultiSourceIngestion.ts
+# 3. Candidate Eligibility & Express API Integration Suite (84 tests)
+npx --prefix apps/api tsx apps/api/src/testCandidateEligibility.ts
 
-# 4. Ingestion Scheduler & Worker Daemon
-npx tsx src/testIngestionScheduler.ts
-```
+# 4. Early Opportunities Feed, Search, Geo & Filter Suite (100 tests)
+npx --prefix apps/api tsx apps/api/src/testEarlyOpportunitiesFeed.ts
 
-To build all packages for production:
-```bash
+# 5. Production Build Typecheck & Page Generation
 npm --prefix apps/api run build
 npm --prefix apps/web run build
 ```
 
 ---
 
-## 📄 License
+## 🚢 Production Deployment Guide
 
-This project is proprietary and confidential. Unauthorized copying, distribution, or usage of this codebase is strictly prohibited.
+### Deployment Topology
+*   **Web Frontend (`apps/web`)**: Deploy to [Vercel](https://vercel.com/) or [Railway](https://railway.app/). Set root directory to `apps/web`.
+*   **API Server (`apps/api`)**: Deploy to [Railway](https://railway.app/), [Render](https://render.com/), or [Fly.io](https://fly.io/). Set root directory to `apps/api`.
+*   **PostgreSQL**: Managed PostgreSQL 15+ (e.g. Neon, Supabase, AWS RDS, Railway).
+
+### Production Environment Variables
+
+#### Backend (`apps/api`)
+```ini
+PORT=3001
+NODE_ENV=production
+DATABASE_URL=postgresql://<user>:<password>@<host>:5432/<db>?sslmode=require
+CLERK_PUBLISHABLE_KEY=pk_live_...
+CLERK_SECRET_KEY=sk_live_...
+FRONTEND_URL=https://<your-frontend-domain>.com
+```
+
+#### Frontend (`apps/web`)
+```ini
+NODE_ENV=production
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...
+CLERK_SECRET_KEY=sk_live_...
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/login
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/register
+NEXT_PUBLIC_API_URL=https://<your-api-domain>.com/api
+```
+
+### Production Migration Command
+```bash
+npx --prefix apps/api prisma migrate deploy
+```
+
+---
+
+## 📄 License
+This project is proprietary and confidential. Unauthorized copying or distribution is strictly prohibited.  
 *Built for the modern candidate.*
