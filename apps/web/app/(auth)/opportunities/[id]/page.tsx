@@ -497,7 +497,7 @@ export default function OpportunityDetailPage({ params }: PageProps) {
                       <Badge variant="neutral">UNSTRUCTURED</Badge>
                     </div>
                     <p style={styles.matchUnavailableSubtitle}>
-                      This opportunity doesn&apos;t currently have structured skill requirements, so Career Intelligence can&apos;t calculate a reliable match yet.
+                      This opportunity doesn&apos;t currently have structured skill requirements, so Udaan can&apos;t calculate a reliable match yet.
                     </p>
                   </div>
                 ) : matchResult ? (
@@ -640,7 +640,7 @@ export default function OpportunityDetailPage({ params }: PageProps) {
                       <span style={styles.sourcePlatformBadge}>{getSourceDescription(opportunity.source)}</span>
                     </div>
                     <p style={styles.transparencyText}>
-                      This listing is ingested directly from {formatSourceName(opportunity.source)}. Career Intelligence parsed role requirements to evaluate transparent alignment with your verified candidate evidence.
+                      This listing is ingested directly from {formatSourceName(opportunity.source)}. Udaan parsed role requirements to evaluate transparent alignment with your verified candidate evidence.
                     </p>
                   </div>
                 </div>

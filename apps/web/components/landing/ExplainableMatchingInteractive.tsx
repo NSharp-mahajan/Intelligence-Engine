@@ -11,7 +11,7 @@ export function ExplainableMatchingInteractive() {
       <div style={styles.header}>
         <h2 style={styles.title}>Explainable Matching</h2>
         <p style={styles.subtitle}>
-          No black boxes. When Career Intelligence calculates a match, it shows you the exact deterministic math.
+          No black boxes. When Udaan calculates a match, it shows you the exact deterministic math.
         </p>
       </div>
 

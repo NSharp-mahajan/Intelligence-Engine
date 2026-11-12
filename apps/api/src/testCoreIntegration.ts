@@ -45,7 +45,7 @@ function assert(condition: boolean, label: string) {
 
 async function runAllTests() {
   console.log('='.repeat(70));
-  console.log('INTELLIGENCE-ENGINE — CORE INTEGRATION REPAIR VERIFICATION');
+  console.log('UDAAN — CORE INTEGRATION REPAIR VERIFICATION');
   console.log('='.repeat(70));
   console.log(`Target Test DB: ${TEST_DB_URL.replace(/:([^:@]+)@/, ':***@')}\n`);
 

@@ -38,7 +38,7 @@ export function WhyCareerIntelligence() {
   return (
     <div style={styles.section}>
       <div style={styles.header}>
-        <h2 style={styles.title}>Why Career Intelligence</h2>
+        <h2 style={styles.title}>Why Udaan</h2>
       </div>
 
       <div style={styles.grid}>

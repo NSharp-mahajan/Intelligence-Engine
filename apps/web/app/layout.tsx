@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Career Intelligence | Evidence-based matching",
-  description: "Stop searching. Start matching. Build your career on verified evidence.",
+  title: "Udaan | Turn your potential into progress",
+  description: "Udaan — Turn your potential into progress. Build your career on verified skills, project evidence, and deterministic opportunity matching.",
 };
 
 import { ClerkProvider } from '@clerk/nextjs';

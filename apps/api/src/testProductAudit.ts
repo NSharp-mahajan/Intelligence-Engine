@@ -1,5 +1,5 @@
 /**
- * Intelligence-Engine — End-to-End Product Verification & Integration Audit Suite
+ * Udaan — End-to-End Product Verification & Integration Audit Suite
  *
  * Covers:
  * 1. Application startup & API connectivity
@@ -60,7 +60,7 @@ function assert(condition: boolean, label: string, stepName = 'General', severit
 
 async function runProductAudit() {
   console.log('='.repeat(75));
-  console.log('INTELLIGENCE-ENGINE — END-TO-END PRODUCT VERIFICATION & INTEGRATION AUDIT');
+  console.log('UDAAN — END-TO-END PRODUCT VERIFICATION & INTEGRATION AUDIT');
   console.log('='.repeat(75));
   console.log(`Dev Database (Read-Only)  : ${DEV_DB_URL.replace(/:([^:@]+)@/, ':***@')}`);
   console.log(`Test Database (Write Target): ${TEST_DB_URL.replace(/:([^:@]+)@/, ':***@')}\n`);

@@ -203,7 +203,7 @@ p {
 @keyframes slowPan { from { transform: scale(1) translate(0, 0); } to { transform: scale(1.05) translate(-1%, -1%); } }
 
 /* ==========================================================================
-   LANDING PAGE — HERO & NAVIGATION (INTELLIGENCE-ENGINE)
+   LANDING PAGE — HERO & NAVIGATION (UDAAN)
    ========================================================================== */
 
 .landing-nav {

@@ -11,6 +11,7 @@ import { WhyCareerIntelligence } from '../../components/landing/WhyCareerIntelli
 import { ProductPreview } from '../../components/landing/ProductPreview';
 import { Footer } from '../../components/landing/Footer';
 import { Button } from '../../components/ui/Button';
+import { Logo } from '../../components/ui/Logo';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -42,20 +43,12 @@ export default function LandingPage() {
         }}
       >
         <div className="landing-nav-inner">
-          <Link href="/" className="landing-nav-logo">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-              <path d="M4 20L10 12H14L20 4" stroke="#D9531E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M20 10V4H14" stroke="#D9531E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <circle cx="4" cy="20" r="2.5" fill="#151515"/>
-              <circle cx="20" cy="4" r="2.5" fill="#151515"/>
-            </svg>
-            <span>Intelligence-Engine</span>
-          </Link>
+          <Logo size="md" />
 
           <div className="landing-nav-links hide-on-mobile">
             <a href="#how-it-works" className="landing-nav-link">How It Works</a>
             <a href="#matching" className="landing-nav-link">Explainable Matching</a>
-            <a href="#why" className="landing-nav-link">Why Intelligence-Engine</a>
+            <a href="#why" className="landing-nav-link">Why Udaan</a>
           </div>
 
           <div className="landing-nav-actions">
@@ -82,7 +75,7 @@ export default function LandingPage() {
             <div className="hero-content">
               <div className="hero-eyebrow">
                 <span className="hero-eyebrow-dot" />
-                <span>EVIDENCE-BASED CAREER MATCHING</span>
+                <span>TURN YOUR POTENTIAL INTO PROGRESS</span>
               </div>
 
               <h1 className="hero-title">
@@ -219,11 +212,11 @@ export default function LandingPage() {
                     </div>
                     <div className="evidence-row">
                       <span className="evidence-skill">REST APIs</span>
-                      <span className="evidence-provenance">Career Intelligence Project</span>
+                      <span className="evidence-provenance">Udaan Project</span>
                     </div>
                     <div className="evidence-row">
                       <span className="evidence-skill">PostgreSQL</span>
-                      <span className="evidence-provenance">Career Intelligence Project</span>
+                      <span className="evidence-provenance">Udaan Project</span>
                     </div>
                   </div>
                 </div>
@@ -285,7 +278,7 @@ export default function LandingPage() {
           <ExplainableMatchingInteractive />
         </div>
 
-        {/* WHY CAREER INTELLIGENCE */}
+        {/* WHY UDAAN */}
         <div id="why">
           <WhyCareerIntelligence />
         </div>
@@ -301,9 +294,9 @@ export default function LandingPage() {
             <div style={styles.ctaAnimationBar}>
               <div style={styles.ctaNode}>Evidence</div>
               <div style={styles.ctaLine}><div style={styles.ctaTrace} /></div>
-              <div style={styles.ctaNode}>Intelligence</div>
+              <div style={styles.ctaNode}>Udaan</div>
               <div style={styles.ctaLine}><div style={{ ...styles.ctaTrace, animationDelay: '1s' }} /></div>
-              <div style={styles.ctaNode}>Opportunity</div>
+              <div style={styles.ctaNode}>Progress</div>
             </div>
 
             <Button 

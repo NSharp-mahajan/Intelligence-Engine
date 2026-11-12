@@ -107,8 +107,8 @@ export function EvidenceGraph() {
                     </svg>
                   </div>
                   <div className="project-card-info">
-                    <div className="project-card-name">Career Intelligence</div>
-                    <div className="project-card-sub">Opportunity matching platform</div>
+                    <div className="project-card-name">Udaan Platform</div>
+                    <div className="project-card-sub">Career evidence & matching system</div>
                   </div>
                 </div>
 

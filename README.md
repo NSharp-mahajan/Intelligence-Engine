@@ -1,6 +1,11 @@
-# Career Intelligence Engine 🚀
+<p align="center">
+  <img src="apps/web/public/udaan-logo.png" alt="Udaan" width="340" />
+</p>
 
-Career Intelligence is a deterministic matching, eligibility evaluation, and career intelligence platform for modern engineering candidates. It replaces traditional "black box" resume-parsing and noisy job boards with an evidence-based system that scores candidate capabilities directly against real-world engineering roles across top tech employers.
+# Udaan 🚀
+> **Turn your potential into progress.**
+
+Udaan is a deterministic matching, eligibility evaluation, and career intelligence platform for modern engineering candidates. It replaces traditional "black box" resume-parsing and noisy job boards with an evidence-based system that scores candidate capabilities directly against real-world engineering roles across top tech employers.
 
 Stop searching. Start matching.
 
@@ -8,13 +13,13 @@ Stop searching. Start matching.
 
 ## 🏗️ System Architecture
 
-The Intelligence Engine is structured as a full-stack TypeScript monorepo with an isolated Next.js frontend, an Express API backend, and an asynchronous multi-source ingestion daemon.
+Udaan is structured as a full-stack TypeScript monorepo with an isolated Next.js frontend, an Express API backend, and an asynchronous multi-source ingestion daemon.
 
 ```mermaid
 flowchart TD
     subgraph Frontend [Next.js Web Application]
         UI[App Router & Discovery Workspace]
-        Dash[Career Intelligence Dashboard]
+        Dash[Udaan Candidate Workspace]
         MatchUI[3-Column Semantic Match Analysis]
         EvidUI[Skills & Projects Evidence Workspace]
         BrandUI[Resilient Company Logo Component]
@@ -79,7 +84,7 @@ flowchart TD
 *   **Framework:** [Next.js (App Router)](https://nextjs.org/) (Turbopack, React 19)
 *   **Language:** TypeScript
 *   **Authentication:** Clerk (`@clerk/nextjs`)
-*   **Branding & Assets:** High-resolution Google Favicon V2 CDN integration with zero-layout-shift fallback tiles
+*   **Branding & Assets:** Official Udaan branding with high-resolution Google Favicon V2 CDN integration for external company logos
 *   **Styling:** Scoped CSS-in-JS design tokens with warm off-white surfaces (`#faf9f6`), dark charcoal typography (`#1c1917`), orange primary accent (`#ea580c`), and verified emerald badges (`#15803d`). Zero Tailwind CSS dependency.
 *   **Data Fetching:** Native `fetch` with authenticated JWT Bearer headers and reactive state synchronization
 
@@ -96,7 +101,7 @@ flowchart TD
 
 ## 🧠 Core Features & Subsystems
 
-### 1. Career Intelligence Dashboard (`/portal`)
+### 1. Udaan Candidate Workspace (`/portal`)
 The central candidate workspace synthesizing real-time career readiness metrics and personalized discovery:
 *   **Disambiguated Intelligence KPIs:** Clearly distinguishes between Total Platform Inventory (2,348+ roles), Skill-Matched Roles, and Verified Eligible Opportunities.
 *   **Transparent Profile Progress:** Evaluates 5 core dimensions: Personal Information, Education (University & Grad Year), Career Direction, Skills Inventory, and Project Evidence. Missing projects correctly caps profile completion at 80%.
@@ -136,7 +141,7 @@ npx --prefix apps/api tsx src/worker.ts --once --providers=greenhouse,lever,jobi
 ## 📂 Monorepo Structure
 
 ```text
-intelligence-engine/
+udaan/
 ├── apps/
 │   ├── api/                          # Express 5 Backend Core
 │   │   ├── prisma/                   # Prisma schema & migrations
@@ -155,7 +160,7 @@ intelligence-engine/
 │   └── web/                          # Next.js 16 (App Router) Frontend
 │       ├── app/
 │       │   ├── (auth)/               # Authenticated candidate routes
-│       │   │   ├── portal/           # Main Career Intelligence Dashboard
+│       │   │   ├── portal/           # Main Udaan Candidate Workspace
 │       │   │   ├── evidence/         # Skills & Projects Evidence Workspace
 │       │   │   ├── opportunities/    # Discovery feed, early-career feed, and match analysis
 │       │   │   │   ├── [id]/         # Opportunity Detail View
@@ -164,7 +169,7 @@ intelligence-engine/
 │       │   │   └── onboarding/       # Multi-step candidate onboarding
 │       │   ├── globals.css           # Design tokens, CSS variables, base styles
 │       │   └── layout.tsx            # Root layout & Clerk provider
-│       ├── components/               # Reusable UI primitives (Button, Modal, Input, Badge, CompanyLogo)
+│       ├── components/               # Reusable UI primitives (Logo, Button, Modal, Input, Badge, CompanyLogo)
 │       ├── lib/                      # Client-side API fetchers, types, and skill categories
 │       └── package.json
 ```
@@ -239,7 +244,7 @@ Visit [http://localhost:3000](http://localhost:3000) to access the application.
 The codebase includes exhaustive automated regression test suites covering all business invariants:
 
 ```bash
-# 1. Dashboard Intelligence, Suitability & Recommendation Tests (8 tests)
+# 1. Dashboard Suitability & Recommendation Tests (8 tests)
 npx --prefix apps/api tsx apps/api/src/testDashboard.ts
 
 # 2. Targeted Eligibility Defect Remediation Suite (20 tests)
@@ -295,5 +300,5 @@ npx --prefix apps/api prisma migrate deploy
 ---
 
 ## 📄 License
-This project is proprietary and confidential. Unauthorized copying or distribution is strictly prohibited.  
-*Built for the modern candidate.*
+This project is proprietary and confidential.  
+*Udaan — Turn your potential into progress.*

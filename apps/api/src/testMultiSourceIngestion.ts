@@ -19,7 +19,7 @@ const prismaTest = new PrismaClient({ adapter });
 
 async function runVerification() {
   console.log('===============================================================');
-  console.log('   INTELLIGENCE-ENGINE: MULTI-SOURCE INGESTION & PIPELINE TEST');
+  console.log('   UDAAN: MULTI-SOURCE INGESTION & PIPELINE TEST');
   console.log('   Target Database: Port 5433 (ISOLATED TEST DATABASE ONLY)');
   console.log('===============================================================\n');
 

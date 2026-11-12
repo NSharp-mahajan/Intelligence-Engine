@@ -103,7 +103,7 @@ export default function SyncProfilePage() {
         {state === 'loading' ? (
           <>
             <div style={styles.spinner} aria-hidden="true" />
-            <p style={styles.title}>Preparing your Career Intelligence profile...</p>
+            <p style={styles.title}>Preparing your Udaan workspace...</p>
             <p style={styles.subtitle}>Securely connecting your account.</p>
           </>
         ) : (

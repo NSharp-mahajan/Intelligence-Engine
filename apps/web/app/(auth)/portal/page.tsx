@@ -320,7 +320,7 @@ export default function PortalOverviewPage() {
         if (skillsRes?.candidateSkills) setCandidateSkills(skillsRes.candidateSkills);
       } catch (err: unknown) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Unable to load your career intelligence workspace.');
+          setError(err instanceof Error ? err.message : 'Unable to load your Udaan workspace.');
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -422,7 +422,7 @@ export default function PortalOverviewPage() {
     return (
       <div style={ds.loadingContainer}>
         <div style={ds.loadingSpinner} />
-        <span style={ds.loadingText}>Synthesizing your career intelligence workspace…</span>
+        <span style={ds.loadingText}>Synthesizing your Udaan workspace…</span>
       </div>
     );
   }
@@ -448,7 +448,7 @@ export default function PortalOverviewPage() {
       <header style={ds.welcomeHeader}>
         <div style={ds.welcomeInfo}>
           <div style={ds.badgeRow}>
-            <span style={ds.welcomeBadge}>Career Intelligence Workspace</span>
+            <span style={ds.welcomeBadge}>Udaan Workspace</span>
             {profile?.targetRole && (
               <span style={ds.roleTargetBadge}>Targeting: {profile.targetRole}</span>
             )}
@@ -460,7 +460,7 @@ export default function PortalOverviewPage() {
             {getGreeting()}, {firstName}
           </h1>
           <p style={ds.welcomeSub}>
-            Your central intelligence hub for evaluating role eligibility, tracking project evidence coverage, and discovering high-signal early engineering opportunities.
+            Your central launchpad to turn your potential into progress — evaluate role eligibility, track project evidence, and discover verified early engineering roles.
           </p>
         </div>
 
@@ -482,8 +482,8 @@ export default function PortalOverviewPage() {
         </div>
       </header>
 
-      {/* ─── 2. Career Intelligence Overview (Disambiguated KPI Strip) ──────── */}
-      <section style={ds.kpiStrip} aria-label="Career Intelligence Metrics">
+      {/* ─── 2. Udaan Overview (Disambiguated KPI Strip) ──────── */}
+      <section style={ds.kpiStrip} aria-label="Udaan Metrics">
         {/* Metric 1: Profile Completeness */}
         <div style={ds.kpiItem}>
           <div style={ds.kpiTopRow}>

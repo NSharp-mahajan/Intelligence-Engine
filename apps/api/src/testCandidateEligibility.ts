@@ -433,7 +433,7 @@ async function runTests() {
   // ─── Test 18: Candidate with Incomplete Profile (Current Schema Reality) ───
   console.log('\nTest 18: Incomplete profile (graduationYear populated, missing academic facts)');
   {
-    // Real-world scenario for current User Profile in Intelligence-Engine
+    // Real-world scenario for current User Profile in Udaan
     const realCand: CandidateProfileInput = {
       graduationYear: 2026,
       university: 'National Institute of Technology',

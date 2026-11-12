@@ -52,7 +52,7 @@ export function ProblemComparison() {
           }}
           onMouseEnter={() => setHovered('intelligence')}
         >
-          <div style={styles.panelTitleInt}>Career Intelligence</div>
+          <div style={styles.panelTitleInt}>Udaan</div>
           <div style={styles.structuredList}>
             <div style={styles.structuredItem}>
               <span style={styles.check}>✓</span> Targeted Opportunities

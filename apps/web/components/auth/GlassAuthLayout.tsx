@@ -1,7 +1,7 @@
 'use client';
 
 import React, { ReactNode } from 'react';
-import Link from 'next/link';
+import { Logo } from '../ui/Logo';
 
 interface GlassAuthLayoutProps {
   children: ReactNode;
@@ -17,15 +17,7 @@ export function GlassAuthLayout({ children }: GlassAuthLayoutProps) {
           
           {/* Header Brand */}
           <div>
-            <Link href="/" className="auth-brand-logo">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-                <path d="M4 20L10 12H14L20 4" stroke="#D9531E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M20 10V4H14" stroke="#D9531E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <circle cx="4" cy="20" r="2.5" fill="#151515"/>
-                <circle cx="20" cy="4" r="2.5" fill="#151515"/>
-              </svg>
-              <span>Intelligence-Engine</span>
-            </Link>
+            <Logo size="md" />
           </div>
 
           {/* Left Body Messaging & Visualization */}
@@ -84,7 +76,7 @@ export function GlassAuthLayout({ children }: GlassAuthLayoutProps) {
 
           {/* Left Footer Statement */}
           <div className="auth-left-footer">
-            Your skills. Your evidence. Your next move.
+            Turn your potential into progress.
           </div>
 
         </div>
@@ -93,15 +85,7 @@ export function GlassAuthLayout({ children }: GlassAuthLayoutProps) {
         <div className="auth-right-panel">
           <div className="auth-form-wrapper">
             <div className="auth-mobile-header mobile-only">
-              <Link href="/" className="auth-brand-logo">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-                  <path d="M4 20L10 12H14L20 4" stroke="#D9531E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M20 10V4H14" stroke="#D9531E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <circle cx="4" cy="20" r="2.5" fill="#151515"/>
-                  <circle cx="20" cy="4" r="2.5" fill="#151515"/>
-                </svg>
-                <span>Intelligence-Engine</span>
-              </Link>
+              <Logo size="sm" />
             </div>
             {children}
           </div>

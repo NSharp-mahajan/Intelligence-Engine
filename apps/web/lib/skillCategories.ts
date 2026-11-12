@@ -1,5 +1,5 @@
 /**
- * Deterministic skill categorization for Intelligence-Engine Career Evidence Workspace.
+ * Deterministic skill categorization for Udaan Career Evidence Workspace.
  * Maps canonical and custom skill names to logical developer domain categories.
  */
 

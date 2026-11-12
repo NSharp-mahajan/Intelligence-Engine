@@ -9,7 +9,7 @@ import { interleaveOpportunitiesByEmployer } from './services/employerInterleavi
 
 async function runQualityFixTestSuite() {
   console.log('===============================================================');
-  console.log('   INTELLIGENCE ENGINE — QUALITY FIX REGRESSION TEST SUITE');
+  console.log('   UDAAN — QUALITY FIX REGRESSION TEST SUITE');
   console.log('===============================================================\n');
 
   let passedTests = 0;

@@ -7,7 +7,7 @@ import { RequirementType } from '@prisma/client';
 
 async function runComprehensiveQA() {
   console.log('====================================================');
-  console.log('=== INTELLIGENCE-ENGINE V1 COMPREHENSIVE QA TEST ===');
+  console.log('=== UDAAN V1 COMPREHENSIVE QA TEST ===');
   console.log('====================================================\n');
 
   let passed = 0;

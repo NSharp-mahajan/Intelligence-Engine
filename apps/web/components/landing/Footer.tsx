@@ -10,9 +10,9 @@ export function Footer() {
           
           {/* Brand Column */}
           <div style={styles.brandCol}>
-            <div style={styles.logo}>Career Intelligence</div>
+            <div style={styles.logo}>Udaan</div>
             <p style={styles.brandDesc}>
-              The deterministic matching engine for modern engineering careers. Stop guessing, start proving.
+              Turn your potential into progress. The deterministic matching engine for modern engineering careers.
             </p>
           </div>
 
@@ -46,7 +46,7 @@ export function Footer() {
 
         <div style={styles.bottomBar}>
           <div style={styles.copyright}>
-            © {currentYear} Career Intelligence Inc. All rights reserved.
+            © {currentYear} Udaan. All rights reserved.
           </div>
           <div style={styles.statusBox}>
             <span style={styles.statusDot} /> All systems operational

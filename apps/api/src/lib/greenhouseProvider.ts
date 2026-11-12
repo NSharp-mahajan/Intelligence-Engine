@@ -192,7 +192,7 @@ export class GreenhouseProvider implements OpportunityProvider {
     const response = await fetch(url, {
       headers: {
         'Accept': 'application/json',
-        'User-Agent': 'Career-Intelligence-Engine/1.0',
+        'User-Agent': 'Udaan/1.0',
       },
       signal: combinedSignal,
     });

@@ -569,7 +569,7 @@ export default function EvidencePage() {
                 </div>
                 <h3 style={styles.projectEmptyHeading}>Showcase what you&apos;ve built.</h3>
                 <p style={styles.projectEmptyBody}>
-                  Projects provide concrete technical evidence that Intelligence-Engine uses to verify your practical implementation experience. Opportunities look for demonstrated execution rather than self-reported keywords.
+                  Projects provide concrete technical evidence that Udaan uses to verify your practical implementation experience. Opportunities look for demonstrated execution rather than self-reported keywords.
                 </p>
 
                 <div style={styles.projectPrepGuide}>
@@ -1491,7 +1491,7 @@ function LinkSkillToProjectModal({
   );
 }
 
-// ─── Inline Style Tokens (Matches Intelligence-Engine Design System) ─────────
+// ─── Inline Style Tokens (Matches Udaan Design System) ─────────
 
 const styles: Record<string, React.CSSProperties> = {
   pageContainer: {

@@ -4,7 +4,7 @@ export function ProductPreview() {
   return (
     <div style={styles.section}>
       <div style={styles.header}>
-        <h2 style={styles.title}>Your Career Intelligence Dashboard</h2>
+        <h2 style={styles.title}>Your Udaan Workspace</h2>
         <p style={styles.subtitle}>A realistic preview of the system inside.</p>
       </div>
 

@@ -32,9 +32,9 @@ export function ProfileVsEvidence() {
           <div style={styles.labelBottom}>CLAIM</div>
         </div>
 
-        {/* RIGHT: Career Intelligence */}
+        {/* RIGHT: Udaan */}
         <div style={styles.cardHighlight}>
-          <div style={styles.cardHeaderHighlight}>CAREER INTELLIGENCE</div>
+          <div style={styles.cardHeaderHighlight}>UDAAN EVIDENCE</div>
           <div style={styles.evidenceList}>
             
             <div style={styles.evidenceItem}>

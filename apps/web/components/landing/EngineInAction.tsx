@@ -73,7 +73,7 @@ export function EngineInAction() {
       <div style={styles.header}>
         <h2 style={styles.title}>See the engine in action.</h2>
         <p style={styles.subtitle}>
-          Career Intelligence turns your verified technical evidence into an explainable opportunity match.
+          Udaan turns your potential into progress by transforming verified technical evidence into an explainable opportunity match.
         </p>
       </div>
 
@@ -104,7 +104,7 @@ export function EngineInAction() {
           </div>
         </div>
 
-        {/* CENTER: INTELLIGENCE ENGINE */}
+        {/* CENTER: UDAAN ENGINE */}
         <div style={styles.centerColumn}>
           {/* SVG Connections Left */}
           <div style={styles.connectionLeft}>
@@ -136,7 +136,7 @@ export function EngineInAction() {
             borderColor: step >= 3 ? 'var(--success-text)' : step >= 1 ? 'var(--accent-primary)' : 'var(--border-dark)'
           }}>
             <div style={styles.engineTopRow}>
-              <div style={styles.engineBrand}>CAREER INTELLIGENCE</div>
+              <div style={styles.engineBrand}>UDAAN</div>
               <div style={styles.statusIndicator}>
                 <span style={{
                   ...styles.statusDot, 

@@ -117,7 +117,7 @@ export function LiveRequirementAnalysis() {
 
             <div className="evidence-card-footer">
               <span style={{ color: '#D9531E', fontWeight: 650 }}>Proven Work: </span>
-              Skills linked directly to verified Career Intelligence project implementation.
+              Skills linked directly to verified Udaan project implementation.
             </div>
           </div>
 

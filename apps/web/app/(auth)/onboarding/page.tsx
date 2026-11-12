@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { fetchApi } from '../../../lib/api';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
+import { Logo } from '../../../components/ui/Logo';
 import type { ProfileResponse } from '../../../lib/types';
 
 const ROLES = [
@@ -220,8 +221,7 @@ export default function OnboardingPage() {
         <div style={styles.leftPanelInner}>
           
           <div style={styles.brandRow}>
-            <div style={styles.logoMark}>CI</div>
-            <span style={styles.brandName}>CAREER INTELLIGENCE</span>
+            <Logo size="md" />
           </div>
 
           <div style={styles.contextualContent}>
@@ -483,7 +483,7 @@ export default function OnboardingPage() {
             {step === 3 && (
               <div className="animate-fade-in" style={styles.stepContent}>
                 <h2 style={styles.stepTitle}>Connect your work.</h2>
-                <p style={styles.stepSubtitle}>Give Career Intelligence access to the places where your professional work already exists.</p>
+                <p style={styles.stepSubtitle}>Give Udaan access to the places where your professional work already exists.</p>
                 
                 <div style={styles.formGrid}>
                   <div style={styles.fieldWithHelper}>
@@ -545,7 +545,7 @@ export default function OnboardingPage() {
                   <div style={styles.explainerTextGroup}>
                     <h3 style={styles.explainerTitle}>Evidence Workspace</h3>
                     <p style={styles.explainerText}>
-                      Career Intelligence uses a dedicated workspace for evidence collection. Once you complete this setup, you will be taken to your portal where you can add your verified skills and projects.
+                      Udaan uses a dedicated workspace for evidence collection. Once you complete this setup, you will be taken to your portal where you can add your verified skills and projects.
                     </p>
                   </div>
                 </div>

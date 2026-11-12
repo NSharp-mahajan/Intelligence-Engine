@@ -100,7 +100,7 @@ class MockFailingProvider implements OpportunityProvider {
 
 async function runTests() {
   console.log('======================================================================');
-  console.log('INTELLIGENCE-ENGINE — INGESTION SCHEDULER VERIFICATION');
+  console.log('UDAAN — INGESTION SCHEDULER VERIFICATION');
   console.log('======================================================================');
   console.log(`Target Test Database: ${TEST_DB_URL.replace(/:([^:@]+)@/, ':***@')}\n`);
 

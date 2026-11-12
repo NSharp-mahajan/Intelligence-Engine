@@ -10,7 +10,7 @@ import {
 
 function printHelp() {
   console.log(`
-Intelligence-Engine — Opportunity Ingestion Worker & Scheduler
+Udaan — Opportunity Ingestion Worker & Scheduler
 
 USAGE:
   npx tsx src/worker.ts [options]
