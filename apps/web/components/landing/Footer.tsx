@@ -1,5 +1,7 @@
 'use client';
 
+import { Logo } from '../ui/Logo';
+
 export function Footer() {
   const currentYear = new Date().getFullYear();
 
@@ -10,7 +12,9 @@ export function Footer() {
           
           {/* Brand Column */}
           <div style={styles.brandCol}>
-            <div style={styles.logo}>Udaan</div>
+            <div style={{ marginBottom: '0.25rem' }}>
+              <Logo size="md" />
+            </div>
             <p style={styles.brandDesc}>
               Turn your potential into progress. The deterministic matching engine for modern engineering careers.
             </p>

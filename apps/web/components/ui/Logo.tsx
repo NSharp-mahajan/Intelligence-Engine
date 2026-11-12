@@ -10,7 +10,7 @@ interface LogoProps {
 }
 
 export function Logo({ showTagline = false, size = 'md', className = '' }: LogoProps) {
-  const height = size === 'sm' ? 26 : size === 'lg' ? 38 : 30;
+  const height = size === 'sm' ? 28 : size === 'lg' ? 44 : 34;
   const width = Math.round(height * 3.48);
 
   return (
@@ -31,6 +31,7 @@ export function Logo({ showTagline = false, size = 'md', className = '' }: LogoP
         alt="Udaan"
         width={width}
         height={height}
+        unoptimized
         style={{ height: `${height}px`, width: 'auto', objectFit: 'contain', display: 'block' }}
         priority
       />
