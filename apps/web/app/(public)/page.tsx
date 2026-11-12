@@ -296,7 +296,7 @@ export default function LandingPage() {
         {/* FINAL CTA SECTION */}
         <section style={styles.ctaSection}>
           <div style={styles.ctaContainer}>
-            <h2 style={styles.ctaTitle}>Your next career move shouldn't be a guessing game.</h2>
+            <h2 style={styles.ctaTitle}>Your next career move shouldn&apos;t be a guessing game.</h2>
             
             <div style={styles.ctaAnimationBar}>
               <div style={styles.ctaNode}>Evidence</div>

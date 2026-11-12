@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { fetchApi } from '../../../lib/api';
 import { Button } from '../../../components/ui/Button';
 import type {
@@ -12,7 +11,6 @@ import type {
   ProjectsResponse,
   DashboardResponse,
   DashboardRecommendation,
-  SkillGap,
   CandidateSkillsResponse,
   CandidateSkill,
 } from '../../../lib/types';
@@ -337,10 +335,7 @@ export default function PortalOverviewPage() {
 
   // ── Derived Data Computations ───────────────────────────────────────────────
 
-  const firstName = useMemo(() => {
-    if (!profile?.fullName) return 'Candidate';
-    return profile.fullName.trim().split(' ')[0];
-  }, [profile?.fullName]);
+  const firstName = profile?.fullName ? profile.fullName.trim().split(' ')[0] : 'Candidate';
 
   // Projects & Skills metrics (exact live counts)
   const skillsCount = candidateSkills.length;
@@ -372,7 +367,6 @@ export default function PortalOverviewPage() {
   // Inventory & Matching metrics
   const totalInventoryCount = dashboardData?.metrics.totalInventoryCount ?? 0;
   const skillMatchedCount = dashboardData?.metrics.skillMatchedCount ?? dashboardData?.metrics.matchedOpportunitiesCount ?? 0;
-  const eligibleOpportunitiesCount = dashboardData?.metrics.eligibleOpportunitiesCount ?? 0;
 
   // Profile completeness sections (5 required dimensions)
   const progressSections: ProfileProgressSection[] = useMemo(() => {

@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { fetchApi } from '../../../../lib/api';
 import { Badge } from '../../../../components/ui/Badge';
-import { Button } from '../../../../components/ui/Button';
 import { Card, CardBody } from '../../../../components/ui/Card';
 import { CompanyLogo } from '../../../../components/CompanyLogo';
 import type { OpportunityResponse, Opportunity, MatchResultResponse, OpportunityEligibilityResponse } from '../../../../lib/types';
@@ -498,7 +497,7 @@ export default function OpportunityDetailPage({ params }: PageProps) {
                       <Badge variant="neutral">UNSTRUCTURED</Badge>
                     </div>
                     <p style={styles.matchUnavailableSubtitle}>
-                      This opportunity doesn't currently have structured skill requirements, so Career Intelligence can't calculate a reliable match yet.
+                      This opportunity doesn&apos;t currently have structured skill requirements, so Career Intelligence can&apos;t calculate a reliable match yet.
                     </p>
                   </div>
                 ) : matchResult ? (

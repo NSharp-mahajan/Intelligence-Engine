@@ -68,7 +68,6 @@ export async function fetchApi<T = unknown>(endpoint: string, options: RequestIn
 
   if (!res.ok) {
     const errorBody = isErrorResponse(data) ? data : null;
-    let errorMsg: string;
     // Backend now prefers the unified shape: { error: { message, code } }
     // but still supports the old flat shape: { error: string }
     const nested =
@@ -82,7 +81,7 @@ export async function fetchApi<T = unknown>(endpoint: string, options: RequestIn
     const flat = errorBody && typeof errorBody.error === 'string' ? errorBody.error : undefined;
     const fallback =
       errorBody && typeof errorBody.details === 'string' ? errorBody.details : errorBody && typeof errorBody.message === 'string' ? errorBody.message : undefined;
-    errorMsg = nested || flat || fallback || 'An unexpected error occurred';
+    const errorMsg = nested || flat || fallback || 'An unexpected error occurred';
     throw new ApiError(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg), res.status, code);
   }
 

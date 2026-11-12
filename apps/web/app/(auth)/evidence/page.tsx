@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
 import { fetchApi } from '../../../lib/api';
 import { Button } from '../../../components/ui/Button';
 import { Modal } from '../../../components/ui/Modal';
@@ -913,16 +912,19 @@ export default function EvidencePage() {
       />
 
       {/* Add / Edit Project Modal */}
-      <ProjectModal
-        isOpen={isProjectModalOpen}
-        onClose={() => setProjectModalOpen(false)}
-        project={editingProject}
-        candidateSkills={candidateSkills}
-        onSuccess={() => {
-          loadData();
-          setProjectModalOpen(false);
-        }}
-      />
+      {isProjectModalOpen && (
+        <ProjectModal
+          key={editingProject ? editingProject.id : 'new-project'}
+          isOpen={isProjectModalOpen}
+          onClose={() => setProjectModalOpen(false)}
+          project={editingProject}
+          candidateSkills={candidateSkills}
+          onSuccess={() => {
+            loadData();
+            setProjectModalOpen(false);
+          }}
+        />
+      )}
 
       {/* Delete Project Modal */}
       <DeleteProjectModal
@@ -960,25 +962,28 @@ export default function EvidencePage() {
       />
 
       {/* Link Skill to Project Modal */}
-      <LinkSkillToProjectModal
-        isOpen={isLinkSkillModalOpen}
-        onClose={() => {
-          setLinkSkillModalOpen(false);
-          setSkillToLink(null);
-        }}
-        skillName={skillToLink}
-        projects={projects}
-        onSuccess={() => {
-          loadData();
-          setLinkSkillModalOpen(false);
-          setSkillToLink(null);
-        }}
-        onOpenCreateProject={() => {
-          setLinkSkillModalOpen(false);
-          setEditingProject(null);
-          setProjectModalOpen(true);
-        }}
-      />
+      {isLinkSkillModalOpen && (
+        <LinkSkillToProjectModal
+          key={skillToLink || 'link-modal'}
+          isOpen={isLinkSkillModalOpen}
+          onClose={() => {
+            setLinkSkillModalOpen(false);
+            setSkillToLink(null);
+          }}
+          skillName={skillToLink}
+          projects={projects}
+          onSuccess={() => {
+            loadData();
+            setLinkSkillModalOpen(false);
+            setSkillToLink(null);
+          }}
+          onOpenCreateProject={() => {
+            setLinkSkillModalOpen(false);
+            setEditingProject(null);
+            setProjectModalOpen(true);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1090,31 +1095,17 @@ function AddSkillModal({
 }
 
 function ProjectModal({ isOpen, onClose, project, candidateSkills, onSuccess }: ProjectModalProps) {
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    githubUrl: '',
-    liveUrl: '',
-  });
-  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [formData, setFormData] = useState(() => ({
+    name: project?.name || '',
+    description: project?.description || '',
+    githubUrl: project?.githubUrl || '',
+    liveUrl: project?.liveUrl || '',
+  }));
+  const [selectedSkills, setSelectedSkills] = useState<string[]>(
+    () => (project?.projectSkills || []).map((ps) => ps.skill.name)
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (project) {
-      setFormData({
-        name: project.name || '',
-        description: project.description || '',
-        githubUrl: project.githubUrl || '',
-        liveUrl: project.liveUrl || '',
-      });
-      setSelectedSkills((project.projectSkills || []).map((ps) => ps.skill.name));
-    } else {
-      setFormData({ name: '', description: '', githubUrl: '', liveUrl: '' });
-      setSelectedSkills([]);
-    }
-    setError('');
-  }, [project, isOpen]);
 
   const toggleSkillSelection = (skillName: string) => {
     setSelectedSkills((prev) =>
@@ -1418,16 +1409,9 @@ function LinkSkillToProjectModal({
   onSuccess,
   onOpenCreateProject,
 }: LinkSkillToProjectModalProps) {
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(() => projects[0]?.id || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (projects.length > 0) {
-      setSelectedProjectId(projects[0].id);
-    }
-    setError('');
-  }, [projects, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

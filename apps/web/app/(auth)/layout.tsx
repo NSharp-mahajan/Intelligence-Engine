@@ -55,9 +55,11 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const { signOut } = useClerk();
 
   // Close mobile menu on route change
-  useEffect(() => {
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
     setIsMobileMenuOpen(false);
-  }, [pathname]);
+  }
 
   const handleLogout = async () => {
     try {
