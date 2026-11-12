@@ -5,7 +5,12 @@
  * from non-software roles (Customer Support, Sales/BDR, HR, Marketing, Operations, etc.).
  */
 
-export type JobFamily = 'SOFTWARE_ENGINEERING' | 'OTHER';
+export type JobFamily =
+  | 'SOFTWARE_ENGINEERING'
+  | 'PRODUCT_DESIGN'
+  | 'DATA_ANALYTICS'
+  | 'OPERATIONS_BUSINESS'
+  | 'OTHER';
 
 // Negative exclusion patterns (roles that are definitely NOT software engineering)
 const NON_SOFTWARE_TITLE_PATTERNS: RegExp[] = [
@@ -102,47 +107,110 @@ export interface RoleInput {
   description?: string | null;
 }
 
+const PRODUCT_DESIGN_PATTERNS: RegExp[] = [
+  /\b(product\s+manage(ment|r)|pm\s+intern|product\s+intern|associate\s+product\s+manager|apm)\b/i,
+  /\b(ui[\/\s]?ux|product\s+design(er)?|ux\s+designer|design\s+intern|ux\s+research(er)?)\b/i,
+  /\b(project\s+manager|program\s+manager|eng\s+project|program\s+intern|project\s+intern)\b/i,
+];
+
+const DATA_ANALYTICS_PATTERNS: RegExp[] = [
+  /\b(data\s+analyst|business\s+analyst|bi\s+analyst|business\s+intelligence|analytics\s+specialist|data\s+analytics)\b/i,
+];
+
+const OPERATIONS_BUSINESS_PATTERNS: RegExp[] = [
+  /\b(customer\s+support|customer\s+service|support\s+specialist|help\s*desk|service\s*desk)\b/i,
+  /\b(business\s+development|bdr|sdr|sales|account\s+executive|account\s+manager)\b/i,
+  /\b(marketing|copywriter|content\s+writer|content\s+editor|creative\s*(&|\+|and)\s*communications)\b/i,
+  /\b(human\s+resources|hr|talent\s+acquisition|recruiter|recruiting|people\s+(team|partner|operations))\b/i,
+  /\b(payroll|accounts\s+payable|accounting|accountant|finance|financial)\b/i,
+  /\b(operations|apprentice(ship)?|industrial\s+trainee|commercial\s+trainee)\b/i,
+  /\b(legal|compliance|procurement|facilities|office\s+manager|receptionist|logistics)\b/i,
+];
+
 /**
- * Classifies an opportunity as SOFTWARE_ENGINEERING or OTHER.
+ * Classifies an opportunity as SOFTWARE_ENGINEERING, PRODUCT_DESIGN, DATA_ANALYTICS, OPERATIONS_BUSINESS, or OTHER.
  */
 export function classifyJobFamily(role: RoleInput): JobFamily {
   const title = (role.title || '').trim();
   const department = (role.department || '').trim();
 
-  // 1. Strict negative exclusion takes precedence
+  // 1. Strict negative exclusion from software engineering
+  let isExcludedFromSWE = false;
   for (const pattern of NON_SOFTWARE_TITLE_PATTERNS) {
     if (pattern.test(title)) {
-      return 'OTHER';
+      isExcludedFromSWE = true;
+      break;
     }
   }
 
-  // 2. Positive title match
-  for (const pattern of SOFTWARE_ENGINEERING_TITLE_PATTERNS) {
-    if (pattern.test(title)) {
-      return 'SOFTWARE_ENGINEERING';
-    }
-  }
-
-  // 3. Department-level signals (if title is generic like "Engineering Intern" or "New Grad")
-  const isGenericEngTitle = /\b(intern|engineering\s+intern|new\s+grad|graduate\s+trainee|associate)\b/i.test(title);
-  if (isGenericEngTitle && department) {
-    if (/\b(engineering|software|technology|tech|product\s+engineering|core\s+tech)\b/i.test(department)) {
-      // Ensure department does not match non-tech functions
-      if (!/\b(sales|marketing|hr|recruiting|finance|legal|operations|support)\b/i.test(department)) {
+  // 2. Positive SWE title match
+  if (!isExcludedFromSWE) {
+    for (const pattern of SOFTWARE_ENGINEERING_TITLE_PATTERNS) {
+      if (pattern.test(title)) {
         return 'SOFTWARE_ENGINEERING';
+      }
+    }
+
+    // 3. Department-level signals (if title is generic like "Engineering Intern" or "New Grad")
+    const isGenericEngTitle = /\b(intern|engineering\s+intern|new\s+grad|graduate\s+trainee|associate)\b/i.test(title);
+    if (isGenericEngTitle && department) {
+      if (/\b(engineering|software|technology|tech|product\s+engineering|core\s+tech)\b/i.test(department)) {
+        // Ensure department does not match non-tech functions
+        if (!/\b(sales|marketing|hr|recruiting|finance|legal|operations|support)\b/i.test(department)) {
+          return 'SOFTWARE_ENGINEERING';
+        }
       }
     }
   }
 
-  // 4. Default to OTHER for non-engineering or unknown roles
+  // 4. Product & Design classification
+  if (isProductDesignRole(role)) {
+    return 'PRODUCT_DESIGN';
+  }
+
+  // 5. Data & Analytics classification
+  if (isDataAnalyticsRole(role)) {
+    return 'DATA_ANALYTICS';
+  }
+
+  // 6. Operations & Business classification
+  if (isOperationsBusinessRole(role)) {
+    return 'OPERATIONS_BUSINESS';
+  }
+
+  // 7. Default to OTHER for non-engineering or unknown roles
   return 'OTHER';
 }
 
 /**
- * Convenience helper returning boolean
+ * Convenience helper returning boolean for Software Engineering roles
  */
 export function isSoftwareEngineeringRole(role: RoleInput): boolean {
   return classifyJobFamily(role) === 'SOFTWARE_ENGINEERING';
+}
+
+/**
+ * Convenience helper returning boolean for Product & Design roles
+ */
+export function isProductDesignRole(role: RoleInput): boolean {
+  const title = (role.title || '').trim();
+  return PRODUCT_DESIGN_PATTERNS.some((pat) => pat.test(title));
+}
+
+/**
+ * Convenience helper returning boolean for Data & Analytics roles
+ */
+export function isDataAnalyticsRole(role: RoleInput): boolean {
+  const title = (role.title || '').trim();
+  return DATA_ANALYTICS_PATTERNS.some((pat) => pat.test(title));
+}
+
+/**
+ * Convenience helper returning boolean for Operations & Business roles
+ */
+export function isOperationsBusinessRole(role: RoleInput): boolean {
+  const title = (role.title || '').trim();
+  return OPERATIONS_BUSINESS_PATTERNS.some((pat) => pat.test(title));
 }
 
 // ─── Engineering Sub-Family Specializations ─────────────────────────────────

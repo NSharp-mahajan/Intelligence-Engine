@@ -96,8 +96,11 @@ const SPECIALIZATION_OPTIONS = [
 ];
 
 const JOB_FAMILY_OPTIONS = [
+  { label: 'All Career Tracks', value: 'ALL' },
   { label: 'Software Engineering', value: 'SOFTWARE_ENGINEERING' },
-  { label: 'All Job Families', value: 'ALL' },
+  { label: 'Product & Design', value: 'PRODUCT_DESIGN' },
+  { label: 'Data & Analytics', value: 'DATA_ANALYTICS' },
+  { label: 'Operations & Business', value: 'OPERATIONS_BUSINESS' },
 ];
 
 const CATEGORY_OPTIONS = [
@@ -612,7 +615,7 @@ function EarlyOpportunitiesFeed() {
   const batchParam = searchParams.get('batch') || '';
   const searchParam = searchParams.get('search') || '';
   const skillParam = searchParams.get('skill') || '';
-  const jobFamilyParam = searchParams.get('jobFamily') || 'SOFTWARE_ENGINEERING';
+  const jobFamilyParam = searchParams.get('jobFamily') || 'ALL';
   const specializationParam = searchParams.get('specialization') || 'ALL';
   const geoScopeParam = searchParams.get('geoScope') || 'INDIA_ONLY';
   const eligibilityParam = searchParams.get('eligibility') || 'ALL';
@@ -644,7 +647,7 @@ function EarlyOpportunitiesFeed() {
           val === '' ||
           val === 'ALL' ||
           (key === 'geoScope' && val === 'INDIA_ONLY') ||
-          (key === 'jobFamily' && val === 'SOFTWARE_ENGINEERING')
+          (key === 'jobFamily' && val === 'ALL')
         ) {
           current.delete(key);
         } else {
@@ -745,7 +748,7 @@ function EarlyOpportunitiesFeed() {
       batchParam ||
       searchParam ||
       skillParam ||
-      (jobFamilyParam !== 'SOFTWARE_ENGINEERING') ||
+      (jobFamilyParam !== 'ALL') ||
       (specializationParam && specializationParam !== 'ALL') ||
       (geoScopeParam && geoScopeParam !== 'INDIA_ONLY') ||
       (eligibilityParam && eligibilityParam !== 'ALL') ||
@@ -798,7 +801,12 @@ function EarlyOpportunitiesFeed() {
               onClick={() => updateQuery({ category: cat.value, page: 1 })}
               style={{
                 ...feedStyles.categoryTab,
-                ...(isActive ? feedStyles.categoryTabActive : {}),
+                backgroundColor: isActive ? 'var(--accent-light)' : 'transparent',
+                color: isActive ? 'var(--accent-hover)' : 'var(--text-secondary)',
+                borderWidth: '1px',
+                borderStyle: 'solid',
+                borderColor: isActive ? '#fed7aa' : 'transparent',
+                fontWeight: isActive ? 600 : 500,
               }}
             >
               {cat.label}
@@ -1195,7 +1203,6 @@ const feedStyles: Record<string, React.CSSProperties> = {
   categoryTabActive: {
     backgroundColor: 'var(--accent-light)',
     color: 'var(--accent-hover)',
-    borderColor: '#fed7aa',
     fontWeight: 600,
   },
   filterSection: {

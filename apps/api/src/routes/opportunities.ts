@@ -20,6 +20,9 @@ import { candidateEligibilityEvaluator } from '../services/candidateEligibilityE
 import {
   classifyJobFamily,
   isSoftwareEngineeringRole,
+  isProductDesignRole,
+  isDataAnalyticsRole,
+  isOperationsBusinessRole,
   classifyEngineeringSubFamily,
   EngineeringSubFamily,
 } from '../services/jobFamilyClassifier';
@@ -45,7 +48,7 @@ const listQuerySchema = z.object({
   experienceLevel: z.enum(['ENTRY', 'JUNIOR', 'MID', 'SENIOR', 'UNKNOWN']).optional(),
   source: z.string().optional(),
   skill: z.string().optional(),
-  jobFamily: z.enum(['SOFTWARE_ENGINEERING', 'ALL']).optional(),
+  jobFamily: z.enum(['SOFTWARE_ENGINEERING', 'PRODUCT_DESIGN', 'DATA_ANALYTICS', 'OPERATIONS_BUSINESS', 'ALL']).optional(),
   matchFilter: z.enum(['80_plus', '60_plus', '40_plus', 'below_40', 'unavailable']).optional(),
   sort: z.string().optional(),
   excludeExpired: z.string().optional().transform(val => val === 'true'),
@@ -230,6 +233,12 @@ router.get('/', async (req: Request, res: Response) => {
 
       if (jobFamily === 'SOFTWARE_ENGINEERING') {
         scoredOpps = scoredOpps.filter((opp) => isSoftwareEngineeringRole(opp));
+      } else if (jobFamily === 'PRODUCT_DESIGN') {
+        scoredOpps = scoredOpps.filter((opp) => isProductDesignRole(opp));
+      } else if (jobFamily === 'DATA_ANALYTICS') {
+        scoredOpps = scoredOpps.filter((opp) => isDataAnalyticsRole(opp));
+      } else if (jobFamily === 'OPERATIONS_BUSINESS') {
+        scoredOpps = scoredOpps.filter((opp) => isOperationsBusinessRole(opp));
       }
 
       if (sort === 'match_desc') {
@@ -423,7 +432,7 @@ const indiaListQuerySchema = z.object({
   stage: z.enum(['INTERNSHIP', 'ENTRY', 'ALL']).optional(),
   search: z.string().optional(),
   skill: z.string().optional(),
-  jobFamily: z.enum(['SOFTWARE_ENGINEERING', 'ALL']).optional(),
+  jobFamily: z.enum(['SOFTWARE_ENGINEERING', 'PRODUCT_DESIGN', 'DATA_ANALYTICS', 'OPERATIONS_BUSINESS', 'ALL']).optional(),
   matchFilter: z.enum(['80_plus', '60_plus', '40_plus', 'below_40', 'unavailable']).optional(),
   sort: z.enum(['balanced', 'posted_desc', 'posted_asc', 'match_desc', 'match_asc', '']).optional(),
   page: z.string().optional().transform((val) => (val ? Math.max(1, parseInt(val, 10)) : 1)),
@@ -580,7 +589,13 @@ router.get('/india', async (req: Request, res: Response) => {
     // 7. Job Family Filter Condition
     if (jobFamily === 'SOFTWARE_ENGINEERING') {
       sqlConditions.push(Prisma.sql`"title" ~* '\\y(sde|swe|software|developer|engineer|fullstack|full-stack|frontend|front-end|backend|back-end|web dev|mobile dev|android|ios|devops|sre|platform engineer|infrastructure|systems engineer|qa automation|sdet|test automation|machine learning|data engineer|analytics engineer|ai engineer|data scientist)\\y'`);
-      sqlConditions.push(Prisma.sql`"title" !~* '\\y(customer support|customer service|support specialist|technical support|helpdesk|service desk|business development|bdr|sdr|account executive|account manager|sales|marketing|copywriter|content writer|human resources|hr|recruiter|recruiting|talent acquisition|payroll|accounts payable|accounting|accountant|industrial trainee|finance|financial|legal|compliance|procurement|facilities|office manager|receptionist|cashier|retail)\\y'`);
+      sqlConditions.push(Prisma.sql`"title" !~* '\\y(customer support|customer service|support specialist|technical support|helpdesk|service desk|business development|bdr|sdr|account executive|account manager|sales|marketing|copywriter|content writer|human resources|hr|recruiter|recruiting|talent acquisition|payroll|accounts payable|accounting|accountant|industrial trainee|commercial trainee|finance|financial|legal|compliance|procurement|facilities|office manager|receptionist|cashier|retail)\\y'`);
+    } else if (jobFamily === 'PRODUCT_DESIGN') {
+      sqlConditions.push(Prisma.sql`"title" ~* '\\y(product manage|product manager|pm intern|product intern|associate product manager|apm|ui[\\/\\s]?ux|product design|ux designer|design intern|ux research|project manager|program manager|eng project|program intern|project intern)\\y'`);
+    } else if (jobFamily === 'DATA_ANALYTICS') {
+      sqlConditions.push(Prisma.sql`"title" ~* '\\y(data analyst|business analyst|bi analyst|business intelligence|analytics specialist|data analytics)\\y'`);
+    } else if (jobFamily === 'OPERATIONS_BUSINESS') {
+      sqlConditions.push(Prisma.sql`"title" ~* '\\y(customer support|customer service|support specialist|technical support|helpdesk|service desk|business development|bdr|sdr|account executive|account manager|sales|marketing|copywriter|content writer|human resources|hr|recruiter|recruiting|talent acquisition|payroll|accounts payable|accounting|accountant|industrial trainee|commercial trainee|finance|financial|legal|compliance|procurement|facilities|office manager|receptionist|cashier|retail|operations|apprentice)\\y'`);
     }
 
     const whereClause = Prisma.sql`WHERE ${Prisma.join(sqlConditions, ' AND ')}`;
@@ -663,6 +678,12 @@ router.get('/india', async (req: Request, res: Response) => {
 
       if (jobFamily === 'SOFTWARE_ENGINEERING') {
         scoredOpps = scoredOpps.filter((opp) => isSoftwareEngineeringRole(opp));
+      } else if (jobFamily === 'PRODUCT_DESIGN') {
+        scoredOpps = scoredOpps.filter((opp) => isProductDesignRole(opp));
+      } else if (jobFamily === 'DATA_ANALYTICS') {
+        scoredOpps = scoredOpps.filter((opp) => isDataAnalyticsRole(opp));
+      } else if (jobFamily === 'OPERATIONS_BUSINESS') {
+        scoredOpps = scoredOpps.filter((opp) => isOperationsBusinessRole(opp));
       }
 
       if (sort === 'match_desc') {
@@ -838,7 +859,7 @@ const earlyCareerListQuerySchema = z.object({
   batch: z.string().optional(),
   search: z.string().optional(),
   skill: z.string().optional(),
-  jobFamily: z.enum(['SOFTWARE_ENGINEERING', 'ALL']).optional(),
+  jobFamily: z.enum(['SOFTWARE_ENGINEERING', 'PRODUCT_DESIGN', 'DATA_ANALYTICS', 'OPERATIONS_BUSINESS', 'ALL']).optional(),
   specialization: z.string().optional(),
   indiaOnly: z.preprocess((val) => {
     if (val === undefined || val === null || val === '') return true;
@@ -1113,6 +1134,12 @@ router.get('/early-career', async (req: Request, res: Response) => {
     // 1. Job Family filter (e.g. SOFTWARE_ENGINEERING vs ALL)
     if (jobFamily === 'SOFTWARE_ENGINEERING') {
       eligibleOpps = eligibleOpps.filter((opp) => isSoftwareEngineeringRole(opp));
+    } else if (jobFamily === 'PRODUCT_DESIGN') {
+      eligibleOpps = eligibleOpps.filter((opp) => isProductDesignRole(opp));
+    } else if (jobFamily === 'DATA_ANALYTICS') {
+      eligibleOpps = eligibleOpps.filter((opp) => isDataAnalyticsRole(opp));
+    } else if (jobFamily === 'OPERATIONS_BUSINESS') {
+      eligibleOpps = eligibleOpps.filter((opp) => isOperationsBusinessRole(opp));
     }
 
     // 2. Engineering Sub-Family Specialization filter
