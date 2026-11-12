@@ -550,6 +550,10 @@ function OpportunityCard({ opp, isAuthenticated }: OpportunityCardProps) {
         </div>
 
         <div style={cardStyles.actionsGroup}>
+          <Link href={`/opportunities/${opp.id}/match`} style={{ ...cardStyles.detailsLink, color: 'var(--accent-primary)', fontWeight: 600 }} title="View personalized skill match and eligibility analysis">
+            <span>Match</span>
+            <span>↗</span>
+          </Link>
           <Link href={`/opportunities/${opp.id}`} style={cardStyles.detailsLink} className="opp-view-link">
             <span>View details</span>
             <span>→</span>

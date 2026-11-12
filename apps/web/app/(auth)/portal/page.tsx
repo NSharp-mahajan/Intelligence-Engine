@@ -1,12 +1,21 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { fetchApi } from '../../../lib/api';
-import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
-import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
-import type { Profile, ProfileResponse, Project, ProjectsResponse, DashboardResponse, DashboardRecommendation, SkillGap } from '../../../lib/types';
+import type {
+  Profile,
+  ProfileResponse,
+  Project,
+  ProjectsResponse,
+  DashboardResponse,
+  DashboardRecommendation,
+  SkillGap,
+} from '../../../lib/types';
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatSourceName(source: string | null | undefined): string {
   if (!source) return 'Job Board';
@@ -14,13 +23,250 @@ function formatSourceName(source: string | null | undefined): string {
   if (s === 'jobicy') return 'Jobicy';
   if (s === 'greenhouse') return 'Greenhouse';
   if (s === 'lever') return 'Lever';
+  if (s === 'ashby') return 'Ashby';
   return source.charAt(0).toUpperCase() + source.slice(1);
 }
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function formatExperienceLevel(level: string | null | undefined): string | null {
+  if (!level || level === 'UNKNOWN') return null;
+  const map: Record<string, string> = {
+    ENTRY: 'Entry Level',
+    JUNIOR: 'Junior',
+    MID: 'Mid Level',
+    SENIOR: 'Senior',
+  };
+  return map[level] ?? level;
+}
+
+function formatOpportunityType(type: string | null | undefined): string {
+  if (!type) return 'Full Time';
+  const map: Record<string, string> = {
+    INTERNSHIP: 'Internship',
+    JOB: 'Job',
+    HACKATHON: 'Hackathon',
+    WORKSHOP: 'Workshop',
+    OPEN_SOURCE: 'Open Source',
+    MICRO_INTERNSHIP: 'Micro-Internship',
+  };
+  return map[type] ?? type;
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function ProfileCompletenessCard({
+  percentage,
+  missingSections,
+  completedSections,
+  onComplete,
+}: {
+  percentage: number;
+  missingSections: string[];
+  completedSections: string[];
+  onComplete: () => void;
+}) {
+  const isComplete = percentage === 100;
+
+  return (
+    <div style={ds.card}>
+      <div style={ds.cardHeader}>
+        <div>
+          <h2 style={ds.cardTitle}>Profile Completeness</h2>
+          <p style={ds.cardSubtitle}>
+            {isComplete
+              ? 'All required sections are complete.'
+              : `${missingSections.length} section${missingSections.length !== 1 ? 's' : ''} remaining`}
+          </p>
+        </div>
+        <span
+          style={{
+            ...ds.percentagePill,
+            backgroundColor: isComplete ? '#f0fdf4' : '#fff7ed',
+            color: isComplete ? '#15803d' : '#9a3412',
+            borderColor: isComplete ? '#bbf7d0' : '#fed7aa',
+          }}
+        >
+          {percentage}%
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div style={ds.progressTrack}>
+        <div
+          style={{
+            ...ds.progressFill,
+            width: `${percentage}%`,
+            backgroundColor: isComplete ? '#16a34a' : '#ea580c',
+          }}
+        />
+      </div>
+
+      {/* Section list */}
+      <div style={ds.sectionList}>
+        {(['Full name', 'University', 'Target role', 'Graduation year', 'At least one skill', 'At least one project'] as const).map((label) => {
+          const done = completedSections.includes(label);
+          return (
+            <div key={label} style={ds.sectionRow}>
+              <span
+                style={{
+                  ...ds.sectionDot,
+                  backgroundColor: done ? '#16a34a' : '#e5e5e5',
+                }}
+              />
+              <span
+                style={{
+                  ...ds.sectionLabel,
+                  color: done ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                  textDecoration: done ? 'none' : 'none',
+                }}
+              >
+                {label}
+              </span>
+              {done && (
+                <span style={ds.checkMark}>✓</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {!isComplete && (
+        <div style={{ marginTop: '1.25rem' }}>
+          <Button variant="outline" size="sm" onClick={onComplete}>
+            Complete profile →
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecommendationCard({ rec }: { rec: DashboardRecommendation }) {
+  const router = useRouter();
+  const totalRequirements = rec.match.matchedCount + rec.match.missingCount;
+  const matchedSkills = rec.match.matchedSkills || [];
+  const expLabel = formatExperienceLevel(rec.experienceLevel);
+  const typeLabel = formatOpportunityType(rec.type);
+
+  return (
+    <div style={ds.recCard}>
+      <div style={ds.recHeader}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h3 style={ds.recTitle}>{rec.title}</h3>
+          <div style={ds.recMeta}>
+            <span style={ds.recOrg}>{rec.organization}</span>
+            {rec.location && (
+              <>
+                <span style={ds.dot}>·</span>
+                <span>{rec.location}</span>
+              </>
+            )}
+            {rec.workMode && rec.workMode !== 'UNKNOWN' && (
+              <>
+                <span style={ds.dot}>·</span>
+                <span style={{ color: 'var(--accent-primary)', fontWeight: 500 }}>{rec.workMode}</span>
+              </>
+            )}
+          </div>
+        </div>
+        <div style={ds.matchBadge}>
+          <span style={ds.matchScore}>{rec.match.score}%</span>
+          <span style={ds.matchLabel}>skill match</span>
+          {totalRequirements > 0 && (
+            <span style={ds.matchRatio}>
+              {rec.match.matchedCount}/{totalRequirements} skills
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Skill chips */}
+      {rec.opportunitySkills && rec.opportunitySkills.length > 0 && (
+        <div style={ds.chipRow}>
+          {rec.opportunitySkills.slice(0, 5).map((os) => {
+            const matched = matchedSkills.includes(os.skill.name);
+            return (
+              <span
+                key={os.skillId}
+                style={{
+                  ...ds.chip,
+                  backgroundColor: matched ? '#f0fdf4' : '#f4f4f5',
+                  borderColor: matched ? '#bbf7d0' : '#e4e4e7',
+                  color: matched ? '#15803d' : '#52525b',
+                }}
+              >
+                {matched && <span style={{ fontSize: '0.625rem', marginRight: '2px' }}>✓</span>}
+                {os.skill.name}
+              </span>
+            );
+          })}
+          {(rec.opportunitySkills.length) > 5 && (
+            <span style={ds.chipMore}>+{rec.opportunitySkills.length - 5} more</span>
+          )}
+        </div>
+      )}
+
+      <div style={ds.recFooter}>
+        <div style={ds.recTags}>
+          <span style={ds.tag}>{typeLabel}</span>
+          {expLabel && <span style={ds.tag}>{expLabel}</span>}
+          {rec.source && (
+            <span style={{ ...ds.tag, color: 'var(--text-tertiary)', fontSize: '0.6875rem' }}>
+              via {formatSourceName(rec.source)}
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
+          <button
+            onClick={() => router.push(`/opportunities/${rec.id}/match`)}
+            style={{ ...ds.viewBtn, color: 'var(--accent-primary)', backgroundColor: '#fff7ed', borderColor: '#fed7aa' }}
+            title="View detailed skill & eligibility match analysis"
+          >
+            Match Analysis
+          </button>
+          <button
+            onClick={() => router.push(`/opportunities/${rec.id}`)}
+            style={ds.viewBtn}
+          >
+            View →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProjectCard({ project }: { project: Project }) {
+  return (
+    <div style={ds.projectItem}>
+      <div style={ds.projectName}>{project.name}</div>
+      {project.projectSkills && project.projectSkills.length > 0 && (
+        <div style={ds.chipRow}>
+          {project.projectSkills.slice(0, 4).map((ps) => (
+            <span key={ps.skillId} style={{ ...ds.chip, backgroundColor: '#f4f4f5', borderColor: '#e4e4e7', color: '#52525b' }}>
+              {ps.skill.name}
+            </span>
+          ))}
+          {project.projectSkills.length > 4 && (
+            <span style={ds.chipMore}>+{project.projectSkills.length - 4}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PortalOverviewPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [profileComplete, setProfileComplete] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,122 +281,128 @@ export default function PortalOverviewPage() {
           fetchApi<ProfileResponse>('/profile').catch(() => null),
           fetchApi<ProjectsResponse>('/profile/projects').catch(() => null),
         ]);
-
         if (cancelled) return;
-
-        if (dashboardRes) {
-          setDashboardData(dashboardRes);
-          setProfileComplete(dashboardRes.profileComplete);
-        } else if (profileRes) {
-          setProfileComplete(profileRes.profileComplete || false);
-        }
-
-        if (profileRes?.profile) {
-          setProfile(profileRes.profile);
-        }
-
-        if (projectsRes?.projects) {
-          setProjects(projectsRes.projects);
-        }
+        if (dashboardRes) setDashboardData(dashboardRes);
+        if (profileRes?.profile) setProfile(profileRes.profile);
+        if (projectsRes?.projects) setProjects(projectsRes.projects);
       } catch (err: unknown) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Unable to load your dashboard. Please try again.');
-        }
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Unable to load your dashboard.');
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
     loadData();
     return () => { cancelled = true; };
   }, []);
 
-  if (loading) return <div style={styles.loading}>Loading your career workspace...</div>;
-  if (error) return <div style={styles.errorAlert}>{error}</div>;
+  if (loading) {
+    return (
+      <div style={ds.loadingState}>
+        <div style={ds.loadingDot} />
+        <span>Loading your workspace…</span>
+      </div>
+    );
+  }
 
-  const firstName = profile?.fullName ? profile.fullName.split(' ')[0] : 'Candidate';
+  if (error) {
+    return (
+      <div style={ds.errorState}>
+        <strong>Unable to load dashboard</strong>
+        <p style={{ margin: '0.5rem 0 1rem', color: 'var(--error-text)' }}>{error}</p>
+        <Button variant="outline" size="sm" onClick={() => window.location.reload()}>Retry</Button>
+      </div>
+    );
+  }
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  };
-
+  // ── Derived values ──────────────────────────────────────────────────────────
+  const firstName = profile?.fullName ? profile.fullName.split(' ')[0] : 'there';
   const skillsCount = dashboardData?.metrics.skillsCount ?? 0;
-  const projectsCount = dashboardData?.metrics.projectsCount ?? projects.length;
-  const recommendedCount = dashboardData?.metrics.matchedOpportunitiesCount ?? 0;
-  const recentProjects = projects.slice(0, 3);
+  // Use the projects from the dedicated API as the authoritative count
+  const projectsCount = projects.length;
+  const skillMatchedCount = dashboardData?.metrics.skillMatchedCount ?? dashboardData?.metrics.matchedOpportunitiesCount ?? 0;
   const recommendations = dashboardData?.recommendations || [];
   const skillGaps = dashboardData?.skillGaps || [];
+  const recentProjects = projects.slice(0, 3);
 
+  // Profile completeness — prefer the detailed API response, fall back to computing from profile data
+  const rawCompleteness = dashboardData?.profileCompleteness;
+  const completenessPercentage = rawCompleteness?.percentage ?? (dashboardData?.profileComplete ? 100 : 0);
+  const completedSections = rawCompleteness?.completedSections ?? (dashboardData?.profileComplete ? ['Full name', 'University', 'Target role', 'Graduation year', 'At least one skill', 'At least one project'] : []);
+  const missingSections = rawCompleteness?.missingSections ?? (dashboardData?.profileComplete ? [] : ['Complete your profile']);
+
+  const hasSkills = skillsCount > 0;
+  const hasProjects = projectsCount > 0;
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={styles.container} className="animate-fade-in">
-      {/* HEADER */}
-      <header style={styles.header}>
-        <h1 style={styles.title}>{getGreeting()}, {firstName}</h1>
-        <p style={styles.subtitle}>Your career intelligence overview.</p>
+    <div style={ds.page} className="animate-fade-in">
+
+      {/* ── Welcome Header ───────────────────────────────────────────────── */}
+      <header style={ds.welcomeHeader}>
+        <div>
+          <h1 style={ds.welcomeTitle}>{getGreeting()}, {firstName}</h1>
+          <p style={ds.welcomeSub}>
+            {profile?.targetRole
+              ? `Preparing for ${profile.targetRole}${profile.graduationYear ? ` · Class of ${profile.graduationYear}` : ''}`
+              : 'Your career intelligence workspace'}
+          </p>
+        </div>
+        {/* Quick actions */}
+        <div style={ds.headerActions}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push('/opportunities/early-career')}
+          >
+            Early Opportunities
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => router.push('/opportunities')}
+          >
+            Browse All →
+          </Button>
+        </div>
       </header>
 
-      {/* KPI METRICS STRIP */}
-      <div style={styles.kpiGrid}>
-        <Card style={styles.kpiCard}>
-          <div style={styles.kpiCardInner}>
-            <span style={styles.kpiLabel}>PROFILE COMPLETENESS</span>
-            <div style={styles.kpiValueContainer}>
-              <span style={styles.kpiValue}>{profileComplete ? '100%' : '0%'}</span>
-              <Badge variant={profileComplete ? 'success' : 'warning'}>
-                {profileComplete ? 'Complete' : 'Incomplete'}
-              </Badge>
-            </div>
-          </div>
-        </Card>
-        
-        <Card style={styles.kpiCard}>
-          <div style={styles.kpiCardInner}>
-            <span style={styles.kpiLabel}>PROFILE SKILLS</span>
-            <div style={styles.kpiValueContainer}>
-              <span style={styles.kpiValue}>{skillsCount}</span>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={styles.kpiCard}>
-          <div style={styles.kpiCardInner}>
-            <span style={styles.kpiLabel}>PROJECT EVIDENCE</span>
-            <div style={styles.kpiValueContainer}>
-              <span style={styles.kpiValue}>{projectsCount}</span>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={styles.kpiCard}>
-          <div style={styles.kpiCardInner}>
-            <span style={styles.kpiLabel}>RECOMMENDED OPPORTUNITIES</span>
-            <div style={styles.kpiValueContainer}>
-              <span style={{ ...styles.kpiValue, color: 'var(--accent-primary)' }}>{recommendedCount}</span>
-            </div>
-          </div>
-        </Card>
+      {/* ── Career Overview Strip ────────────────────────────────────────── */}
+      <div style={ds.overviewStrip}>
+        <div style={ds.overviewItem}>
+          <span style={ds.overviewValue}>{completenessPercentage}%</span>
+          <span style={ds.overviewLabel}>Profile</span>
+        </div>
+        <div style={ds.overviewDivider} />
+        <div style={ds.overviewItem}>
+          <span style={ds.overviewValue}>{skillsCount}</span>
+          <span style={ds.overviewLabel}>Skills</span>
+        </div>
+        <div style={ds.overviewDivider} />
+        <div style={ds.overviewItem}>
+          <span style={ds.overviewValue}>{projectsCount}</span>
+          <span style={ds.overviewLabel}>Projects</span>
+        </div>
+        <div style={ds.overviewDivider} />
+        <div style={ds.overviewItem}>
+          <span style={{ ...ds.overviewValue, color: skillMatchedCount > 0 ? 'var(--accent-primary)' : 'var(--text-secondary)' }}>
+            {skillMatchedCount}
+          </span>
+          <span style={ds.overviewLabel}>Skill Matches</span>
+        </div>
       </div>
 
-      {/* EARLY CAREER DISCOVERY BANNER */}
-      <div style={styles.earlyDiscoveryBanner}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          <div style={styles.earlyBannerIconWrapper}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2.2">
-              <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-              <path d="M6 12v5c3 3 9 3 12 0v-5" />
-            </svg>
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#9a3412' }}>
-              Looking for Internships or Entry-Level Roles?
-            </div>
-            <div style={{ fontSize: '0.8125rem', color: '#c2410c' }}>
-              Explore the dedicated Early Opportunities feed with candidate eligibility evaluation for 2024–2027 graduates.
-            </div>
+      {/* ── Early Opportunities Banner ───────────────────────────────────── */}
+      <div style={ds.earlyBanner}>
+        <div style={ds.earlyBannerIcon}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2.2">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+            <path d="M6 12v5c3 3 9 3 12 0v-5" />
+          </svg>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={ds.earlyBannerTitle}>Looking for Internships or Entry-Level Roles?</div>
+          <div style={ds.earlyBannerSub}>
+            Explore the dedicated Early Opportunities feed — 12 verified Indian early-career roles across Software Engineering, Product, Operations & more.
           </div>
         </div>
         <Button
@@ -159,243 +411,189 @@ export default function PortalOverviewPage() {
           onClick={() => router.push('/opportunities/early-career')}
           style={{ backgroundColor: '#ea580c', borderColor: '#ea580c', flexShrink: 0 }}
         >
-          Explore Early Opportunities →
+          Explore →
         </Button>
       </div>
 
-      {/* MAIN TWO-COLUMN WORKSPACE (40% Left / 60% Right) */}
-      <div style={styles.workspaceGrid}>
-        
-        {/* LEFT COLUMN — CAREER DIRECTION, SKILL GAPS, RECENT EVIDENCE */}
-        <div style={styles.leftColumn}>
-          
-          {/* CAREER DIRECTION */}
-          <Card style={styles.cardItem}>
-            <CardHeader>
-              <h2 style={styles.sectionTitle}>Career Direction</h2>
-            </CardHeader>
-            <CardBody>
-              <div style={styles.infoRow}>
-                <span style={styles.infoLabel}>Target Role</span>
-                <span style={styles.infoValue}>{profile?.targetRole || 'Not specified'}</span>
-              </div>
-              <div style={styles.infoRow}>
-                <span style={styles.infoLabel}>Target Timeline</span>
-                <span style={styles.infoValue}>Graduation {profile?.graduationYear || 'Not specified'}</span>
-              </div>
-              <div style={styles.infoRow}>
-                <span style={styles.infoLabel}>Profile Status</span>
-                <span style={styles.infoValue}>
-                  {profileComplete ? (
-                    <span style={styles.completeStatus}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-                      All core fields provided
-                    </span>
-                  ) : (
-                    <span style={{ color: '#b45309', fontWeight: 500 }}>Missing core fields</span>
-                  )}
-                </span>
-              </div>
-              {!profileComplete && (
-                <div style={{ marginTop: '1.25rem' }}>
-                  <Button variant="outline" size="sm" onClick={() => router.push('/onboarding')}>Complete Profile</Button>
-                </div>
-              )}
-            </CardBody>
-          </Card>
+      {/* ── Main Workspace Grid ──────────────────────────────────────────── */}
+      <div style={ds.workspaceGrid}>
 
-          {/* SKILL GAP ANALYSIS */}
-          <Card style={styles.cardItem}>
-            <CardHeader>
-              <div style={styles.sectionHeaderRow}>
-                <div>
-                  <h2 style={styles.sectionTitle}>Skill Gap Analysis</h2>
-                  <p style={styles.sectionSubtext}>High-demand skills missing from your profile</p>
-                </div>
-              </div>
-            </CardHeader>
-            <CardBody>
-              {skillGaps.length === 0 ? (
-                <div style={styles.skillGapEmpty}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success-text)" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                  <span style={styles.skillGapEmptyText}>Your skill evidence covers current opportunity requirements well.</span>
-                </div>
-              ) : (
-                <div style={styles.skillGapsList}>
-                  {skillGaps.map(gap => (
-                    <div key={gap.skillId || gap.skillName} style={styles.skillGapItem}>
-                      <div style={styles.skillGapMain}>
-                        <span style={styles.skillGapName}>{gap.skillName}</span>
-                        <span style={styles.skillGapBadge}>Gap</span>
-                      </div>
-                      <span style={styles.skillGapMeta}>Required by {gap.opportunityCount} {gap.opportunityCount === 1 ? 'opportunity' : 'opportunities'}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardBody>
-          </Card>
+        {/* LEFT COLUMN */}
+        <div style={ds.leftCol}>
 
-          {/* RECENT EVIDENCE */}
-          <Card style={styles.cardItem}>
-            <CardHeader>
-              <div style={styles.sectionHeaderRow}>
-                <h2 style={styles.sectionTitle}>Recent Evidence</h2>
-                {recentProjects.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={() => router.push('/evidence')}>View all →</Button>
+          {/* Profile Completeness */}
+          <ProfileCompletenessCard
+            percentage={completenessPercentage}
+            missingSections={missingSections}
+            completedSections={completedSections}
+            onComplete={() => router.push('/onboarding')}
+          />
+
+          {/* Career Direction */}
+          <div style={ds.card}>
+            <div style={ds.cardHeader}>
+              <h2 style={ds.cardTitle}>Career Direction</h2>
+            </div>
+            <div style={ds.infoTable}>
+              <div style={ds.infoRow}>
+                <span style={ds.infoKey}>Target role</span>
+                <span style={ds.infoVal}>{profile?.targetRole || <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Not set</span>}</span>
+              </div>
+              <div style={ds.infoRow}>
+                <span style={ds.infoKey}>Graduation</span>
+                <span style={ds.infoVal}>{profile?.graduationYear ? `Class of ${profile.graduationYear}` : <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Not set</span>}</span>
+              </div>
+              <div style={{ ...ds.infoRow, borderBottom: 'none', marginBottom: 0, paddingBottom: 0 }}>
+                <span style={ds.infoKey}>University</span>
+                <span style={ds.infoVal}>{profile?.university || <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>Not set</span>}</span>
+              </div>
+            </div>
+            {(!profile?.targetRole || !profile?.graduationYear) && (
+              <div style={{ marginTop: '1.25rem' }}>
+                <Button variant="ghost" size="sm" onClick={() => router.push('/onboarding')}>
+                  Edit profile
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Project Evidence */}
+          <div style={ds.card}>
+            <div style={ds.cardHeader}>
+              <h2 style={ds.cardTitle}>Project Evidence</h2>
+              {recentProjects.length > 0 && (
+                <button
+                  onClick={() => router.push('/evidence')}
+                  style={ds.ghostLink}
+                >
+                  View all →
+                </button>
+              )}
+            </div>
+            {!hasProjects ? (
+              <div style={ds.emptyState}>
+                <div style={ds.emptyIcon}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <line x1="9" y1="3" x2="9" y2="21" />
+                  </svg>
+                </div>
+                <div style={ds.emptyTitle}>No projects yet</div>
+                <p style={ds.emptyText}>
+                  Adding projects with skills enables evidence-backed opportunity matching and improves your profile completeness.
+                </p>
+                <Button variant="outline" size="sm" onClick={() => router.push('/evidence')}>
+                  Add your first project
+                </Button>
+              </div>
+            ) : (
+              <div style={ds.projectList}>
+                {recentProjects.map((p) => (
+                  <ProjectCard key={p.id} project={p} />
+                ))}
+                {projects.length > 3 && (
+                  <button onClick={() => router.push('/evidence')} style={ds.ghostLink}>
+                    +{projects.length - 3} more projects →
+                  </button>
                 )}
               </div>
-            </CardHeader>
-            <CardBody>
-              {recentProjects.length === 0 ? (
-                <div style={styles.emptyStateContainer}>
-                  <div style={styles.emptyStateIcon}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                      <line x1="9" y1="3" x2="9" y2="21"></line>
-                    </svg>
+            )}
+          </div>
+
+          {/* Skill Gap Analysis */}
+          {skillGaps.length > 0 && (
+            <div style={ds.card}>
+              <div style={ds.cardHeader}>
+                <div>
+                  <h2 style={ds.cardTitle}>Skill Gaps</h2>
+                  <p style={ds.cardSubtitle}>High-demand skills missing from your profile</p>
+                </div>
+              </div>
+              <div style={ds.gapList}>
+                {skillGaps.map((gap: SkillGap) => (
+                  <div key={gap.skillId || gap.skillName} style={ds.gapRow}>
+                    <span style={ds.gapName}>{gap.skillName}</span>
+                    <span style={ds.gapCount}>
+                      {gap.opportunityCount} {gap.opportunityCount === 1 ? 'opportunity' : 'opportunities'}
+                    </span>
                   </div>
-                  <h3 style={styles.emptyStateTitle}>No project evidence yet</h3>
-                  <p style={styles.emptyStateText}>
-                    Add your first project to enable evidence-backed opportunity matching.
-                  </p>
-                  <Button variant="outline" size="sm" onClick={() => router.push('/evidence')}>Add Project</Button>
-                </div>
-              ) : (
-                <div style={styles.recentProjectsList}>
-                  {recentProjects.map(project => (
-                    <div key={project.id} style={styles.recentProjectItem}>
-                      <span style={styles.recentProjectName}>{project.name}</span>
-                      <div style={styles.recentProjectSkills}>
-                        {project.projectSkills?.slice(0, 4).map((ps) => (
-                          <Badge key={ps.skillId} variant="neutral">{ps.skill.name}</Badge>
-                        ))}
-                        {(project.projectSkills?.length || 0) > 4 && (
-                          <span style={styles.moreSkillsText}>+{(project.projectSkills.length - 4)} more</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardBody>
-          </Card>
+                ))}
+              </div>
+            </div>
+          )}
 
         </div>
 
-        {/* RIGHT COLUMN — RECOMMENDED OPPORTUNITIES (DOMINANT BLOCK) */}
-        <div style={styles.rightColumn}>
-          <Card style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-            <CardHeader>
-              <div style={styles.sectionHeaderRow}>
-                <div>
-                  <h2 style={styles.sectionTitle}>Recommended Opportunities</h2>
-                  <p style={styles.sectionSubtext}>Dynamically ranked by your profile skills & project evidence</p>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => router.push('/opportunities')}>Explore all →</Button>
+        {/* RIGHT COLUMN — Recommendations */}
+        <div style={ds.rightCol}>
+          <div style={{ ...ds.card, flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={ds.cardHeader}>
+              <div>
+                <h2 style={ds.cardTitle}>Recommended Opportunities</h2>
+                <p style={ds.cardSubtitle}>
+                  {hasSkills
+                    ? `Ranked by skill match · ${skillMatchedCount > 0 ? `${skillMatchedCount} entry-level matches found` : 'Add more skills to improve matching'}`
+                    : 'Add skills to your profile to see personalised recommendations'}
+                </p>
               </div>
-            </CardHeader>
-            <CardBody style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              {recommendations.length === 0 ? (
-                <div style={styles.emptyStateContainerCentered}>
-                  <div style={styles.matchingPlaceholderIcon}>
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <line x1="12" y1="16" x2="12" y2="12"></line>
-                      <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                    </svg>
-                  </div>
-                  <h3 style={styles.emptyStateTitle}>No Recommendations Available</h3>
-                  <p style={styles.emptyStateText}>
-                    Explore available opportunities to find matching career pathways.
-                  </p>
-                  <Button variant="primary" onClick={() => router.push('/opportunities')}>Browse Opportunities</Button>
+              <button onClick={() => router.push('/opportunities')} style={ds.ghostLink}>
+                Browse all →
+              </button>
+            </div>
+
+            {recommendations.length === 0 ? (
+              <div style={ds.centeredEmpty}>
+                <div style={ds.centeredEmptyIcon}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="1.75">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 8v4M12 16h.01" />
+                  </svg>
                 </div>
-              ) : (
-                <div style={styles.oppsList}>
-                  {recommendations.map((rec) => {
-                    const totalRequirements = rec.match.matchedCount + rec.match.missingCount;
-                    const matchedSkills = rec.match.matchedSkills || [];
-                    return (
-                      <div key={rec.id} style={styles.oppCardItem}>
-                        <div style={styles.oppHeader}>
-                          <div>
-                            <h3 style={styles.oppTitle}>{rec.title}</h3>
-                            <div style={styles.oppOrgMeta}>
-                              <span style={styles.oppOrg}>{rec.organization}</span>
-                              {rec.location && <span style={styles.oppDot}>•</span>}
-                              {rec.location && <span>{rec.location}</span>}
-                              {rec.workMode && <span style={styles.oppDot}>•</span>}
-                              {rec.workMode && <span style={styles.oppWorkMode}>{rec.workMode}</span>}
-                              {rec.source && <span style={styles.oppDot}>•</span>}
-                              {rec.source && (
-                                <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>
-                                  via {formatSourceName(rec.source)}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div style={styles.matchBadgeContainer}>
-                            <span style={styles.matchScoreBadge}>{rec.match.score}% Match</span>
-                            {totalRequirements > 0 && (
-                              <span style={styles.matchRatioText}>
-                                {rec.match.matchedCount} of {totalRequirements} matched
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* SKILLS CHIPS */}
-                        <div style={styles.oppSkillsRow}>
-                          {rec.opportunitySkills && rec.opportunitySkills.length > 0 ? (
-                            rec.opportunitySkills.slice(0, 5).map((os) => {
-                              const isMatched = matchedSkills.includes(os.skill.name);
-                              return (
-                                <span
-                                  key={os.skillId}
-                                  style={{
-                                    ...styles.oppSkillChip,
-                                    backgroundColor: isMatched ? '#f0fdf4' : '#f4f4f5',
-                                    borderColor: isMatched ? '#bbf7d0' : '#e4e4e7',
-                                    color: isMatched ? '#15803d' : '#52525b',
-                                  }}
-                                >
-                                  {isMatched && <span style={styles.chipCheck}>✓</span>}
-                                  {os.skill.name}
-                                </span>
-                              );
-                            })
-                          ) : (
-                            <span style={styles.generalSkillNote}>General Engineering Role</span>
-                          )}
-                          {(rec.opportunitySkills?.length || 0) > 5 && (
-                            <span style={styles.moreSkillsText}>+{(rec.opportunitySkills!.length - 5)} more</span>
-                          )}
-                        </div>
-
-                        <div style={styles.oppFooter}>
-                          <div style={styles.oppBadges}>
-                            <Badge variant="neutral">{rec.type || 'Full Time'}</Badge>
-                            {rec.experienceLevel && <Badge variant="neutral">{rec.experienceLevel}</Badge>}
-                          </div>
-                          <Button variant="outline" size="sm" onClick={() => router.push(`/opportunities/${rec.id}`)}>
-                            View opportunity →
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  <div style={styles.oppsFooterLinkContainer}>
-                    <Button variant="ghost" style={{ width: '100%' }} onClick={() => router.push('/opportunities')}>
-                      Explore all opportunities →
+                <div style={ds.emptyTitle}>No recommendations yet</div>
+                <p style={ds.emptyText}>
+                  {!hasSkills
+                    ? 'Add skills to your profile to unlock skill-matched recommendations.'
+                    : !hasProjects
+                      ? 'Add at least one project with skills to improve recommendation quality.'
+                      : 'We\'ll surface relevant entry-level and internship roles as you complete your profile.'}
+                </p>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {!hasSkills && (
+                    <Button variant="outline" size="sm" onClick={() => router.push('/profile')}>
+                      Add Skills
                     </Button>
-                  </div>
+                  )}
+                  <Button variant="primary" size="sm" onClick={() => router.push('/opportunities')}>
+                    Browse Opportunities
+                  </Button>
                 </div>
-              )}
-            </CardBody>
-          </Card>
+              </div>
+            ) : (
+              <div style={ds.recList}>
+                {/* Disclaimer */}
+                <div style={ds.disclaimer}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 8v4M12 16h.01" />
+                  </svg>
+                  <span>
+                    Ranked by skill match only — not eligibility. Verify requirements on each listing before applying.
+                  </span>
+                </div>
+
+                {recommendations.map((rec) => (
+                  <RecommendationCard key={rec.id} rec={rec} />
+                ))}
+
+                <button
+                  onClick={() => router.push('/opportunities')}
+                  style={{ ...ds.ghostLink, textAlign: 'center', paddingTop: '0.75rem', display: 'block', width: '100%' }}
+                >
+                  Explore all opportunities →
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
       </div>
@@ -403,403 +601,520 @@ export default function PortalOverviewPage() {
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  loading: {
-    minHeight: '300px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: 'var(--text-secondary)',
-    fontSize: '0.9375rem',
-    fontWeight: 500,
-  },
-  errorAlert: {
-    backgroundColor: 'var(--error-bg)',
-    color: 'var(--error-text)',
-    padding: '1rem 1.25rem',
-    borderRadius: 'var(--radius-md)',
-    border: '1px solid var(--error-border)',
-    fontSize: '0.9375rem',
-  },
-  container: {
+// ─── Design System ────────────────────────────────────────────────────────────
+
+const ds: Record<string, React.CSSProperties> = {
+  page: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '2rem',
+    gap: '1.75rem',
     maxWidth: '1240px',
     margin: '0 auto',
     width: '100%',
   },
-  header: {
-    marginBottom: '0.25rem',
+
+  // States
+  loadingState: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.75rem',
+    minHeight: '280px',
+    color: 'var(--text-secondary)',
+    fontSize: '0.9375rem',
   },
-  title: {
-    fontSize: '2.25rem',
+  loadingDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    backgroundColor: 'var(--accent-primary)',
+  },
+  errorState: {
+    backgroundColor: 'var(--error-bg)',
+    color: 'var(--error-text)',
+    border: '1px solid var(--error-border)',
+    borderRadius: 'var(--radius-md)',
+    padding: '1.5rem',
+    fontSize: '0.9375rem',
+  },
+
+  // Welcome header
+  welcomeHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: '1rem',
+  },
+  welcomeTitle: {
+    fontSize: '2rem',
     fontWeight: 700,
     color: 'var(--text-primary)',
     letterSpacing: '-0.03em',
     marginBottom: '0.375rem',
+    lineHeight: 1.1,
   },
-  subtitle: {
-    fontSize: '1.0625rem',
+  welcomeSub: {
+    fontSize: '1rem',
     color: 'var(--text-secondary)',
     fontWeight: 450,
   },
-  kpiGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-    gap: '1.25rem',
+  headerActions: {
+    display: 'flex',
+    gap: '0.75rem',
+    alignItems: 'center',
+    flexShrink: 0,
+    flexWrap: 'wrap',
   },
-  kpiCard: {
+
+  // Overview strip
+  overviewStrip: {
     backgroundColor: 'var(--bg-surface)',
-    border: '1px solid var(--border-light)',
-    borderRadius: 'var(--radius-md)',
+    borderRadius: 'var(--radius-lg)',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: 'var(--border-light)',
+    boxShadow: 'var(--shadow-sm)',
+    display: 'flex',
+    alignItems: 'center',
+    padding: '1.25rem 2rem',
+    gap: '0',
   },
-  kpiCardInner: {
-    padding: '1.25rem 1.5rem',
+  overviewItem: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.625rem',
-  },
-  kpiLabel: {
-    fontSize: '0.6875rem',
-    fontWeight: 700,
-    color: 'var(--text-tertiary)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-  },
-  kpiValueContainer: {
-    display: 'flex',
     alignItems: 'center',
-    gap: '0.875rem',
+    gap: '0.25rem',
+    flex: 1,
   },
-  kpiValue: {
-    fontSize: '2.25rem',
+  overviewValue: {
+    fontSize: '1.875rem',
     fontWeight: 750,
     color: 'var(--text-primary)',
-    lineHeight: 1,
     letterSpacing: '-0.03em',
+    lineHeight: 1,
   },
-  earlyDiscoveryBanner: {
+  overviewLabel: {
+    fontSize: '0.6875rem',
+    fontWeight: 600,
+    color: 'var(--text-tertiary)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.07em',
+  },
+  overviewDivider: {
+    width: '1px',
+    height: '40px',
+    backgroundColor: 'var(--border-light)',
+    flexShrink: 0,
+  },
+
+  // Early banner
+  earlyBanner: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: '14px',
+    gap: '1rem',
     backgroundColor: '#fff7ed',
-    border: '1px solid #fed7aa',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: '#fed7aa',
     borderRadius: 'var(--radius-md)',
-    padding: '16px 20px',
-    marginBottom: '1.75rem',
+    padding: '1rem 1.25rem',
+    flexWrap: 'wrap',
   },
-  earlyBannerIconWrapper: {
+  earlyBannerIcon: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '40px',
-    height: '40px',
+    width: '36px',
+    height: '36px',
     borderRadius: '8px',
     backgroundColor: '#ffedd5',
     flexShrink: 0,
   },
+  earlyBannerTitle: {
+    fontWeight: 700,
+    fontSize: '0.9rem',
+    color: '#9a3412',
+    marginBottom: '0.125rem',
+  },
+  earlyBannerSub: {
+    fontSize: '0.8125rem',
+    color: '#c2410c',
+  },
+
+  // Workspace grid
   workspaceGrid: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 4fr) minmax(0, 6fr)',
-    gap: '1.75rem',
+    gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 3fr)',
+    gap: '1.5rem',
     alignItems: 'start',
   },
-  leftColumn: {
+  leftCol: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '1.5rem',
+    gap: '1.25rem',
   },
-  rightColumn: {
+  rightCol: {
     display: 'flex',
     flexDirection: 'column',
-    height: '100%',
+    minHeight: '600px',
   },
-  cardItem: {
+
+  // Card
+  card: {
     backgroundColor: 'var(--bg-surface)',
-    border: '1px solid var(--border-light)',
-    borderRadius: 'var(--radius-md)',
+    borderRadius: 'var(--radius-lg)',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: 'var(--border-light)',
+    boxShadow: 'var(--shadow-sm)',
+    padding: '1.5rem',
+    display: 'flex',
+    flexDirection: 'column',
   },
-  sectionTitle: {
-    fontSize: '1.0625rem',
-    fontWeight: 650,
-    color: 'var(--text-primary)',
-    letterSpacing: '-0.015em',
-  },
-  sectionSubtext: {
-    fontSize: '0.8125rem',
-    color: 'var(--text-secondary)',
-    marginTop: '0.125rem',
-  },
-  sectionHeaderRow: {
+  cardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    width: '100%',
+    marginBottom: '1.25rem',
+  },
+  cardTitle: {
+    fontSize: '1rem',
+    fontWeight: 650,
+    color: 'var(--text-primary)',
+    letterSpacing: '-0.015em',
+    marginBottom: '0.125rem',
+  },
+  cardSubtitle: {
+    fontSize: '0.8125rem',
+    color: 'var(--text-secondary)',
+  },
+
+  // Profile completeness
+  percentagePill: {
+    fontSize: '0.875rem',
+    fontWeight: 700,
+    padding: '0.25rem 0.75rem',
+    borderRadius: 'var(--radius-full)',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    flexShrink: 0,
+  },
+  progressTrack: {
+    height: '6px',
+    borderRadius: '3px',
+    backgroundColor: '#f4f4f5',
+    marginBottom: '1.25rem',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: '3px',
+    transition: 'width 0.5s ease',
+  },
+  sectionList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.625rem',
+  },
+  sectionRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.625rem',
+  },
+  sectionDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    flexShrink: 0,
+  },
+  sectionLabel: {
+    fontSize: '0.875rem',
+    flex: 1,
+  },
+  checkMark: {
+    fontSize: '0.75rem',
+    color: '#16a34a',
+    fontWeight: 700,
+  },
+
+  // Info table (career direction)
+  infoTable: {
+    display: 'flex',
+    flexDirection: 'column',
   },
   infoRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: '0.875rem',
+    alignItems: 'baseline',
+    paddingBottom: '0.75rem',
     borderBottom: '1px solid var(--border-light)',
-    marginBottom: '0.875rem',
+    marginBottom: '0.75rem',
+    gap: '1rem',
   },
-  infoLabel: {
-    fontSize: '0.875rem',
+  infoKey: {
+    fontSize: '0.8125rem',
     fontWeight: 500,
     color: 'var(--text-secondary)',
+    flexShrink: 0,
   },
-  infoValue: {
+  infoVal: {
     fontSize: '0.875rem',
     fontWeight: 600,
     color: 'var(--text-primary)',
+    textAlign: 'right',
   },
-  completeStatus: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.375rem',
-    color: 'var(--success-text)',
-    fontSize: '0.875rem',
+
+  // Ghost link button
+  ghostLink: {
+    background: 'none',
+    border: 'none',
+    color: 'var(--accent-primary)',
+    fontSize: '0.8125rem',
     fontWeight: 600,
+    cursor: 'pointer',
+    padding: 0,
+    fontFamily: 'inherit',
+    textDecoration: 'none',
   },
-  skillGapsList: {
+
+  // Empty states
+  emptyState: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.75rem',
-  },
-  skillGapItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '0.75rem 0.875rem',
-    backgroundColor: 'var(--bg-primary)',
-    border: '1px solid var(--border-light)',
-    borderRadius: 'var(--radius-md)',
-  },
-  skillGapMain: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-  },
-  skillGapName: {
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    color: 'var(--text-primary)',
-  },
-  skillGapBadge: {
-    fontSize: '0.6875rem',
-    fontWeight: 600,
-    color: '#9a3412',
-    backgroundColor: '#ffedd5',
-    border: '1px solid #fed7aa',
-    padding: '0.125rem 0.375rem',
-    borderRadius: '4px',
-  },
-  skillGapMeta: {
-    fontSize: '0.75rem',
-    color: 'var(--text-secondary)',
-    fontWeight: 500,
-  },
-  skillGapEmpty: {
-    display: 'flex',
-    alignItems: 'center',
     gap: '0.625rem',
-    padding: '0.75rem 0',
-  },
-  skillGapEmptyText: {
-    fontSize: '0.875rem',
-    color: 'var(--text-secondary)',
-  },
-  emptyStateContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-start',
     padding: '0.5rem 0',
-    gap: '0.5rem',
   },
-  emptyStateContainerCentered: {
+  emptyIcon: {
+    width: '36px',
+    height: '36px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f4f4f5',
+    borderRadius: '8px',
+    color: 'var(--text-tertiary)',
+    marginBottom: '0.25rem',
+  },
+  emptyTitle: {
+    fontSize: '0.9375rem',
+    fontWeight: 600,
+    color: 'var(--text-primary)',
+  },
+  emptyText: {
+    fontSize: '0.8125rem',
+    color: 'var(--text-secondary)',
+    lineHeight: 1.5,
+    maxWidth: '340px',
+    margin: 0,
+  },
+  centeredEmpty: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     textAlign: 'center',
-    padding: '3rem 1.5rem',
-    gap: '1rem',
+    gap: '0.875rem',
+    padding: '3rem 2rem',
     flex: 1,
   },
-  emptyStateIcon: {
-    width: '36px',
-    height: '36px',
-    borderRadius: '8px',
-    backgroundColor: 'var(--bg-surface-hover)',
+  centeredEmptyIcon: {
+    width: '52px',
+    height: '52px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: 'var(--text-tertiary)',
+    backgroundColor: 'var(--accent-light)',
+    borderRadius: 'var(--radius-full)',
     marginBottom: '0.25rem',
   },
-  matchingPlaceholderIcon: {
-    width: '56px',
-    height: '56px',
-    borderRadius: 'var(--radius-full)',
-    backgroundColor: 'var(--accent-light)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: '0.5rem',
-  },
-  emptyStateTitle: {
-    fontSize: '1.0625rem',
-    fontWeight: 600,
-    color: 'var(--text-primary)',
-  },
-  emptyStateText: {
-    fontSize: '0.875rem',
-    color: 'var(--text-secondary)',
-    lineHeight: 1.5,
-    maxWidth: '320px',
-  },
-  recentProjectsList: {
+
+  // Projects
+  projectList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.875rem',
+    gap: '1rem',
   },
-  recentProjectItem: {
+  projectItem: {
     display: 'flex',
     flexDirection: 'column',
     gap: '0.5rem',
-    paddingBottom: '0.875rem',
+    paddingBottom: '1rem',
     borderBottom: '1px solid var(--border-light)',
   },
-  recentProjectName: {
+  projectName: {
     fontSize: '0.9375rem',
     fontWeight: 600,
     color: 'var(--text-primary)',
   },
-  recentProjectSkills: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '0.375rem',
-    alignItems: 'center',
-  },
-  moreSkillsText: {
-    fontSize: '0.75rem',
-    color: 'var(--text-tertiary)',
-    fontWeight: 500,
-  },
-  oppsList: {
+
+  // Skill gaps
+  gapList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '1rem',
-    flex: 1,
+    gap: '0.5rem',
   },
-  oppCardItem: {
+  gapRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '0.625rem 0.875rem',
+    backgroundColor: 'var(--bg-primary)',
+    borderRadius: 'var(--radius-md)',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: 'var(--border-light)',
+  },
+  gapName: {
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    color: 'var(--text-primary)',
+  },
+  gapCount: {
+    fontSize: '0.75rem',
+    color: 'var(--text-secondary)',
+  },
+
+  // Recommendation list
+  recList: {
     display: 'flex',
     flexDirection: 'column',
     gap: '0.875rem',
-    padding: '1.25rem',
-    border: '1px solid var(--border-light)',
+    flex: 1,
+  },
+  disclaimer: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '0.5rem',
+    padding: '0.625rem 0.875rem',
+    backgroundColor: '#f4f4f5',
+    borderRadius: 'var(--radius-md)',
+    fontSize: '0.75rem',
+    color: 'var(--text-secondary)',
+    lineHeight: 1.5,
+  },
+
+  // Recommendation card
+  recCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem',
+    padding: '1.125rem',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: 'var(--border-light)',
     borderRadius: 'var(--radius-md)',
     backgroundColor: 'var(--bg-surface)',
-    transition: 'border-color var(--transition-fast)',
+    transition: 'border-color 150ms ease',
   },
-  oppHeader: {
+  recHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: '1rem',
   },
-  oppTitle: {
-    fontSize: '1.0625rem',
+  recTitle: {
+    fontSize: '1rem',
     fontWeight: 700,
     color: 'var(--text-primary)',
     letterSpacing: '-0.015em',
+    marginBottom: '0.25rem',
   },
-  oppOrgMeta: {
+  recMeta: {
     display: 'flex',
     alignItems: 'center',
-    gap: '0.375rem',
+    gap: '0.3rem',
     fontSize: '0.8125rem',
     color: 'var(--text-secondary)',
-    marginTop: '0.25rem',
+    flexWrap: 'wrap',
   },
-  oppOrg: {
+  recOrg: {
     fontWeight: 600,
     color: 'var(--text-primary)',
   },
-  oppDot: {
+  dot: {
     color: 'var(--text-tertiary)',
   },
-  oppWorkMode: {
-    color: 'var(--accent-primary)',
-    fontWeight: 500,
-  },
-  matchBadgeContainer: {
+  matchBadge: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'flex-end',
-    gap: '0.25rem',
+    gap: '0.125rem',
+    flexShrink: 0,
   },
-  matchScoreBadge: {
-    fontSize: '0.8125rem',
-    fontWeight: 700,
+  matchScore: {
+    fontSize: '1rem',
+    fontWeight: 750,
     color: '#15803d',
-    backgroundColor: '#dcfce7',
-    border: '1px solid #bbf7d0',
-    padding: '0.25rem 0.625rem',
-    borderRadius: '6px',
     lineHeight: 1,
   },
-  matchRatioText: {
+  matchLabel: {
+    fontSize: '0.6875rem',
+    color: '#16a34a',
+    fontWeight: 500,
+  },
+  matchRatio: {
     fontSize: '0.6875rem',
     color: 'var(--text-tertiary)',
     fontWeight: 500,
   },
-  oppSkillsRow: {
+
+  // Chips
+  chipRow: {
     display: 'flex',
     flexWrap: 'wrap',
-    gap: '0.375rem',
+    gap: '0.3rem',
     alignItems: 'center',
   },
-  oppSkillChip: {
+  chip: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '0.25rem',
+    gap: '0.2rem',
     fontSize: '0.75rem',
-    fontWeight: 550,
+    fontWeight: 500,
     padding: '0.1875rem 0.5rem',
     borderRadius: '4px',
     borderWidth: '1px',
     borderStyle: 'solid',
-    borderColor: 'transparent',
   },
-  chipCheck: {
-    fontSize: '0.6875rem',
-    fontWeight: 700,
-  },
-  generalSkillNote: {
+  chipMore: {
     fontSize: '0.75rem',
     color: 'var(--text-tertiary)',
-    fontStyle: 'italic',
+    fontWeight: 500,
   },
-  oppFooter: {
+
+  // Rec footer
+  recFooter: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: '0.75rem',
+    paddingTop: '0.625rem',
     borderTop: '1px solid var(--border-light)',
-    marginTop: '0.25rem',
   },
-  oppBadges: {
+  recTags: {
     display: 'flex',
+    gap: '0.375rem',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: '0.5rem',
   },
-  oppsFooterLinkContainer: {
-    marginTop: 'auto',
-    paddingTop: '0.5rem',
+  tag: {
+    fontSize: '0.75rem',
+    fontWeight: 500,
+    color: 'var(--text-secondary)',
+    backgroundColor: '#f4f4f5',
+    padding: '0.1875rem 0.5rem',
+    borderRadius: '4px',
+  },
+  viewBtn: {
+    background: 'none',
+    border: '1px solid var(--border-light)',
+    color: 'var(--accent-primary)',
+    fontSize: '0.8125rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    padding: '0.3125rem 0.75rem',
+    borderRadius: 'var(--radius-md)',
+    fontFamily: 'inherit',
+    flexShrink: 0,
   },
 };

@@ -364,11 +364,17 @@ export interface SkillGap {
 export interface DashboardResponse {
   hasProfile: boolean;
   profileComplete: boolean;
+  profileCompleteness?: {
+    percentage: number;
+    completedSections: string[];
+    missingSections: string[];
+  };
   hasSkillsOrEvidence: boolean;
   hasStructuredOpportunities: boolean;
   metrics: {
     skillsCount: number;
     projectsCount: number;
+    skillMatchedCount?: number;
     matchedOpportunitiesCount: number;
   };
   recommendations: DashboardRecommendation[];

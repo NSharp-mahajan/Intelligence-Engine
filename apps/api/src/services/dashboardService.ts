@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { MatchingService } from './matchingService';
-import { isProfileComplete } from '../lib/profileCompleteness';
+import { getProfileCompleteness } from '../lib/profileCompleteness';
 import { getNonTestOpportunityWhere } from '../lib/opportunityFilters';
 
 export interface DashboardRecommendation {
@@ -40,15 +40,42 @@ export interface SkillGap {
 export interface DashboardData {
   hasProfile: boolean;
   profileComplete: boolean;
+  profileCompleteness: {
+    percentage: number;
+    completedSections: string[];
+    missingSections: string[];
+  };
   hasSkillsOrEvidence: boolean;
   hasStructuredOpportunities: boolean;
   metrics: {
     skillsCount: number;
     projectsCount: number;
+    /**
+     * Opportunities with skill match score > 0, filtered to entry/junior/unknown
+     * experience levels appropriate for the candidate's profile.
+     * This is NOT total inventory and NOT eligibility-verified count.
+     */
+    skillMatchedCount: number;
+    /** Backward-compatibility alias — same value as skillMatchedCount */
     matchedOpportunitiesCount: number;
   };
   recommendations: DashboardRecommendation[];
   skillGaps: SkillGap[];
+}
+
+/**
+ * Title keywords that identify senior / leadership roles when experienceLevel is UNKNOWN or null.
+ */
+const SENIOR_ROLE_TITLE_PATTERNS = /\b(sr\.?|senior|staff|principal|lead|director|head of|manager)\b/i;
+
+function isSeniorOpportunity(opp: { title: string; experienceLevel?: string | null }): boolean {
+  if (opp.experienceLevel === 'SENIOR' || opp.experienceLevel === 'MID') {
+    return true;
+  }
+  if (opp.experienceLevel === 'ENTRY' || opp.experienceLevel === 'JUNIOR') {
+    return false;
+  }
+  return SENIOR_ROLE_TITLE_PATTERNS.test(opp.title);
 }
 
 export class DashboardService {
@@ -84,11 +111,13 @@ export class DashboardService {
       return {
         hasProfile: false,
         profileComplete: false,
+        profileCompleteness: { percentage: 0, completedSections: [], missingSections: ['Full name', 'University', 'Target role', 'Graduation year', 'At least one skill', 'At least one project'] },
         hasSkillsOrEvidence: false,
         hasStructuredOpportunities: false,
         metrics: {
           skillsCount: 0,
           projectsCount: 0,
+          skillMatchedCount: 0,
           matchedOpportunitiesCount: 0,
         },
         recommendations: [],
@@ -100,7 +129,22 @@ export class DashboardService {
     const projectsCount = profile.projects?.length || 0;
     const evidenceMap = this.matchingService.buildEvidenceMapFromProfile(profile);
     const hasSkillsOrEvidence = evidenceMap.size > 0;
-    const profileCompleted = isProfileComplete(profile);
+
+    // Compute accurate profile completeness using the enriched criteria
+    const completeness = getProfileCompleteness({
+      fullName: profile.fullName,
+      university: profile.university,
+      targetRole: profile.targetRole,
+      graduationYear: profile.graduationYear,
+      candidateSkills: profile.candidateSkills,
+      projects: profile.projects,
+    });
+
+    // Determine whether candidate is early-career based on graduation year
+    // If graduating 2024-2030, treat as early-career (restrict senior recommendations)
+    const currentYear = new Date().getFullYear();
+    const isEarlyCareer = !profile.graduationYear ||
+      (profile.graduationYear >= currentYear - 1 && profile.graduationYear <= currentYear + 6);
 
     // 2. Fetch all structured opportunities in a single query (avoid N+1)
     // Exclude opportunities whose explicit deadline has passed; retain unknown deadlines (null)
@@ -134,12 +178,18 @@ export class DashboardService {
     if (!hasSkillsOrEvidence || !hasStructuredOpportunities) {
       return {
         hasProfile: true,
-        profileComplete: profileCompleted,
+        profileComplete: completeness.isComplete,
+        profileCompleteness: {
+          percentage: completeness.percentage,
+          completedSections: completeness.completedSections,
+          missingSections: completeness.missingSections,
+        },
         hasSkillsOrEvidence,
         hasStructuredOpportunities,
         metrics: {
           skillsCount,
           projectsCount,
+          skillMatchedCount: 0,
           matchedOpportunitiesCount: 0,
         },
         recommendations: [],
@@ -154,7 +204,7 @@ export class DashboardService {
     }> = [];
 
     const missingSkillCounts = new Map<string, { skillId: string; skillName: string; count: number }>();
-    let matchedOpportunitiesCount = 0;
+    let skillMatchedCount = 0;
 
     for (const opp of structuredOpportunities) {
       const matchResult = this.matchingService.matchEvidenceToOpportunity(evidenceMap, opp);
@@ -166,11 +216,15 @@ export class DashboardService {
       const missingCount = matchResult.requiredMissing.length + matchResult.preferredMissing.length;
       const totalRequirements = matchedCount + missingCount;
 
-      if (matchResult.score > 0) {
-        matchedOpportunitiesCount++;
+      // Exclude senior/staff roles from both the count and recommendations for early-career candidates
+      const isSenior = isSeniorOpportunity(opp);
+      if (isEarlyCareer && isSenior) {
+        // Still contribute to skill gaps (candidate sees what they're missing for growth)
+        // but do NOT count in recommendations or matched count
+      } else if (matchResult.score > 0) {
+        skillMatchedCount++;
 
-        // Step 6.1: Recommendation Eligibility Rule
-        // Only opportunities with AT LEAST 3 structured requirements total qualify for Dashboard Recommendations
+        // Only opportunities with AT LEAST 3 structured requirements total qualify for Recommendations
         if (totalRequirements >= 3) {
           scoredList.push({
             opp,
@@ -192,8 +246,7 @@ export class DashboardService {
         }
       }
 
-      // Track missing skills across structured opportunities
-      // De-duplicate per opportunity so each opportunity counts at most once per missing skill
+      // Track missing skills across structured opportunities (all levels for skill gap awareness)
       const oppMissingSkillIds = new Map<string, string>();
       for (const s of matchResult.requiredMissing) {
         if (s.skillId && s.skillName) oppMissingSkillIds.set(s.skillId, s.skillName);
@@ -252,8 +305,6 @@ export class DashboardService {
     }));
 
     // 5. Aggregate and sort skill gaps
-    // - Highest opportunityCount first
-    // - Deterministic secondary ordering (skillName asc)
     const skillGaps: SkillGap[] = Array.from(missingSkillCounts.values())
       .sort((a, b) => {
         if (b.count !== a.count) {
@@ -270,13 +321,19 @@ export class DashboardService {
 
     return {
       hasProfile: true,
-      profileComplete: profileCompleted,
+      profileComplete: completeness.isComplete,
+      profileCompleteness: {
+        percentage: completeness.percentage,
+        completedSections: completeness.completedSections,
+        missingSections: completeness.missingSections,
+      },
       hasSkillsOrEvidence,
       hasStructuredOpportunities,
       metrics: {
         skillsCount,
         projectsCount,
-        matchedOpportunitiesCount,
+        skillMatchedCount,
+        matchedOpportunitiesCount: skillMatchedCount,
       },
       recommendations,
       skillGaps,

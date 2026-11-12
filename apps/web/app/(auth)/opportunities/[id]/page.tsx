@@ -462,7 +462,27 @@ export default function OpportunityDetailPage({ params }: PageProps) {
 
           {/* Your Match Section */}
           <div style={styles.matchSection}>
-            <h2 style={styles.sectionTitle}>Your Match</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <h2 style={styles.sectionTitle}>Your Match</h2>
+              <Link
+                href={`/opportunities/${opportunity.id}/match`}
+                style={{
+                  fontSize: '0.8125rem',
+                  fontWeight: 650,
+                  color: 'var(--accent-primary)',
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  backgroundColor: '#fff7ed',
+                  border: '1px solid #fed7aa',
+                  padding: '0.25rem 0.625rem',
+                  borderRadius: '4px',
+                }}
+              >
+                Deep Match Analysis →
+              </Link>
+            </div>
             <Card style={styles.matchCard}>
               <CardBody>
                 {matchLoading ? (
@@ -735,6 +755,27 @@ export default function OpportunityDetailPage({ params }: PageProps) {
                   >
                     Apply on {formatSourceName(opportunity.source)} ↗
                   </a>
+                  <Link
+                    href={`/opportunities/${opportunity.id}/match`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '100%',
+                      padding: '0.5rem 1rem',
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'transparent',
+                      color: 'var(--accent-primary)',
+                      border: '1px solid var(--border-light)',
+                      textDecoration: 'none',
+                      marginTop: '0.5rem',
+                      boxSizing: 'border-box',
+                    }}
+                  >
+                    View Match Analysis →
+                  </Link>
                 </div>
               )}
             </CardBody>
