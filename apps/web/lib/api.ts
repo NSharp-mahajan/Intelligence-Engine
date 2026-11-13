@@ -40,11 +40,9 @@ function isErrorResponse(value: unknown): value is ErrorResponse {
 async function resolveClerkToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
 
+  // Fast path: window.Clerk and session are already hydrated
   const clerk = window.Clerk;
-  if (!clerk) return null;
-
-  // Fast path: session is already available
-  if (clerk.session) {
+  if (clerk?.session) {
     try {
       const token = await clerk.session.getToken();
       if (token) return token;
@@ -53,10 +51,10 @@ async function resolveClerkToken(): Promise<string | null> {
     }
   }
 
-  // Bounded poll for session hydration (up to 4 checks x 100ms = 400ms max)
-  // Avoids firing unauthenticated requests during immediate post-login hydration
-  for (let i = 0; i < 4; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
+  // Bounded poll for Clerk script loading and session hydration (up to 8 checks x 150ms = 1.2s max)
+  // Handles cold script execution and page transition session hydration
+  for (let i = 0; i < 8; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
     const activeClerk = window.Clerk;
     if (activeClerk?.session) {
       try {

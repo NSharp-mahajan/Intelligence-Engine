@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useClerk } from '@clerk/nextjs';
+import { useClerk, useAuth } from '@clerk/nextjs';
 import { ApiError, fetchApi } from '../../lib/api';
 import { Logo } from '../../components/ui/Logo';
 import { DiscoveryWorkspaceLayout } from '../../components/discovery/DiscoveryWorkspaceLayout';
@@ -12,6 +12,7 @@ import type { User } from '../../lib/types';
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { isLoaded: authLoaded, isSignedIn, getToken } = useAuth();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -30,8 +31,27 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         return;
       }
 
+      // Wait until Clerk client SDK finishes hydrating authentication state
+      if (!authLoaded) {
+        return;
+      }
+
+      // If Clerk is fully loaded and user is not signed in, redirect to login
+      if (!isSignedIn) {
+        if (pathname === '/opportunities' || pathname.startsWith('/opportunities/')) {
+          setUser(null);
+        } else {
+          router.replace('/login');
+        }
+        setLoading(false);
+        return;
+      }
+
       try {
-        const userData = await fetchApi<User>('/auth/me');
+        const token = await getToken();
+        const userData = await fetchApi<User>('/auth/me', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (!isOnboarding && !userData.profileComplete) {
           router.replace('/onboarding');
           return;
@@ -54,7 +74,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       }
     }
     checkAuth();
-  }, [router, pathname, isSyncProfile]);
+  }, [router, pathname, isSyncProfile, authLoaded, isSignedIn, getToken]);
 
   const { signOut } = useClerk();
 
