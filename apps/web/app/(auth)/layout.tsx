@@ -40,6 +40,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       } catch (err: unknown) {
         if (pathname === '/opportunities' || pathname.startsWith('/opportunities/')) {
           setUser(null);
+        } else if (err instanceof ApiError && err.code === 'USER_NOT_MAPPED') {
+          // Self-heal: internal user is not yet created in PostgreSQL.
+          // Route directly to /sync-profile instead of bouncing to login.
+          router.replace('/sync-profile');
         } else if (err instanceof ApiError && err.status === 401) {
           router.replace('/login');
         } else {

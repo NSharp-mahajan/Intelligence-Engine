@@ -48,6 +48,7 @@ export default function SyncProfilePage() {
 
         const res = await fetch(`${API_URL}/auth/sync`, {
           method: 'POST',
+          cache: 'no-store',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,

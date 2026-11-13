@@ -12,7 +12,14 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
     return next();
   }
   try {
-    const auth = getAuth(req);
+    let auth = req.auth;
+    if (!auth) {
+      try {
+        auth = getAuth(req);
+      } catch {
+        auth = undefined;
+      }
+    }
     if (!auth || !auth.userId) {
       res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } });
       return;

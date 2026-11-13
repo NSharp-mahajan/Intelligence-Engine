@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { fetchApi } from '../../../lib/api';
+import { fetchApi, ApiError } from '../../../lib/api';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { Logo } from '../../../components/ui/Logo';
@@ -77,7 +77,11 @@ export default function OnboardingPage() {
           });
         }
       } catch (e: unknown) {
-        if (e instanceof Error && e.message.includes('not been created')) {
+        if (e instanceof ApiError && e.code === 'USER_NOT_MAPPED') {
+          router.replace('/sync-profile');
+          return;
+        }
+        if (e instanceof Error && (e.message.includes('not been created') || e.message.includes('PROFILE_NOT_FOUND'))) {
           setHasExistingProfile(false);
         } else {
           setError('Unable to load your existing profile. Please refresh and try again.');
@@ -97,57 +101,100 @@ export default function OnboardingPage() {
     setError('');
   };
 
-  const validateStep = () => {
-    const newErrors: Record<string, string> = {};
-    if (step === 1) {
-      if (!formData.fullName.trim()) newErrors.fullName = "Full name is required";
+  const normalizeUrl = (raw: string): string | null => {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+  };
+
+  const validateStepFields = (stepToValidate: number): Record<string, string> => {
+    const stepErrors: Record<string, string> = {};
+    if (stepToValidate === 1) {
+      if (!formData.fullName.trim()) stepErrors.fullName = "Full name is required";
+      if (!formData.university.trim()) stepErrors.university = "University or college is required to complete your profile";
       if (formData.graduationYear) {
         const year = Number(formData.graduationYear);
         if (isNaN(year) || !Number.isInteger(year) || year < 1950 || year > 2100) {
-          newErrors.graduationYear = "Must be a valid year between 1950 and 2100";
+          stepErrors.graduationYear = "Must be a valid year between 1950 and 2100";
         }
       }
       if (formData.cgpa !== '') {
         const val = Number(formData.cgpa);
         if (isNaN(val) || val < 0) {
-          newErrors.cgpa = "CGPA cannot be negative";
+          stepErrors.cgpa = "CGPA cannot be negative";
         } else if (!formData.cgpaScale) {
-          newErrors.cgpaScale = "Please select a CGPA scale";
+          stepErrors.cgpaScale = "Please select a CGPA scale";
         } else if (formData.cgpaScale === 'SCALE_4_0' && val > 4.0) {
-          newErrors.cgpa = "CGPA cannot exceed 4.0 for a 4-point scale";
+          stepErrors.cgpa = "CGPA cannot exceed 4.0 for a 4-point scale";
         } else if (formData.cgpaScale === 'SCALE_7_0' && val > 7.0) {
-          newErrors.cgpa = "CGPA cannot exceed 7.0 for a 7-point scale";
+          stepErrors.cgpa = "CGPA cannot exceed 7.0 for a 7-point scale";
         } else if (formData.cgpaScale === 'SCALE_10_0' && val > 10.0) {
-          newErrors.cgpa = "CGPA cannot exceed 10.0 for a 10-point scale";
+          stepErrors.cgpa = "CGPA cannot exceed 10.0 for a 10-point scale";
         }
       }
       if (formData.percentage !== '') {
         const val = Number(formData.percentage);
         if (isNaN(val) || val < 0 || val > 100) {
-          newErrors.percentage = "Percentage must be between 0 and 100";
+          stepErrors.percentage = "Percentage must be between 0 and 100";
         }
       }
       if (formData.activeBacklogs !== '') {
         const val = Number(formData.activeBacklogs);
         if (isNaN(val) || !Number.isInteger(val) || val < 0) {
-          newErrors.activeBacklogs = "Active backlogs cannot be negative";
+          stepErrors.activeBacklogs = "Active backlogs cannot be negative";
         }
       }
       if (formData.experienceMonths !== '') {
         const val = Number(formData.experienceMonths);
         if (isNaN(val) || !Number.isInteger(val) || val < 0) {
-          newErrors.experienceMonths = "Experience months cannot be negative";
+          stepErrors.experienceMonths = "Experience months cannot be negative";
         }
       }
-    } else if (step === 3) {
-      const urlRegex = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
-      if (formData.githubUrl && !urlRegex.test(formData.githubUrl)) newErrors.githubUrl = "Enter a valid URL";
-      if (formData.linkedinUrl && !urlRegex.test(formData.linkedinUrl)) newErrors.linkedinUrl = "Enter a valid URL";
-      if (formData.portfolioUrl && !urlRegex.test(formData.portfolioUrl)) newErrors.portfolioUrl = "Enter a valid URL";
+    } else if (stepToValidate === 2) {
+      if (!formData.targetRole.trim()) {
+        stepErrors.targetRole = "Target role is required to evaluate opportunity matches";
+      }
+    } else if (stepToValidate === 3) {
+      const urlRegex = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/i;
+      if (formData.githubUrl && !urlRegex.test(formData.githubUrl.trim())) stepErrors.githubUrl = "Enter a valid URL";
+      if (formData.linkedinUrl && !urlRegex.test(formData.linkedinUrl.trim())) stepErrors.linkedinUrl = "Enter a valid URL";
+      if (formData.portfolioUrl && !urlRegex.test(formData.portfolioUrl.trim())) stepErrors.portfolioUrl = "Enter a valid URL";
     }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return stepErrors;
+  };
+
+  const validateStep = () => {
+    const stepErrors = validateStepFields(step);
+    setErrors(stepErrors);
+    return Object.keys(stepErrors).length === 0;
+  };
+
+  const validateAllSteps = (): boolean => {
+    const allErrors: Record<string, string> = {
+      ...validateStepFields(1),
+      ...validateStepFields(2),
+      ...validateStepFields(3),
+    };
+
+    setErrors(allErrors);
+
+    if (Object.keys(allErrors).length > 0) {
+      // Jump to earliest step containing validation error
+      const step1Fields = ['fullName', 'university', 'graduationYear', 'cgpa', 'cgpaScale', 'percentage', 'activeBacklogs', 'experienceMonths'];
+      const hasStep1Error = step1Fields.some(f => Boolean(allErrors[f]));
+      if (hasStep1Error) {
+        setStep(1);
+      } else if (allErrors.targetRole) {
+        setStep(2);
+      } else if (allErrors.githubUrl || allErrors.linkedinUrl || allErrors.portfolioUrl) {
+        setStep(3);
+      }
+      setError("Please complete all required fields and correct highlighted errors before finishing.");
+      return false;
+    }
+
+    return true;
   };
 
   const handleNext = () => {
@@ -161,32 +208,59 @@ export default function OnboardingPage() {
   };
 
   const handleSubmit = async () => {
-    if (!validateStep()) return;
+    if (!validateAllSteps()) return;
     
     setError('');
     setSubmitting(true);
+
+    const payload = {
+      fullName: formData.fullName.trim(),
+      university: formData.university.trim() || null,
+      graduationYear: formData.graduationYear ? parseInt(formData.graduationYear, 10) : null,
+      targetRole: formData.targetRole.trim() || null,
+      degree: formData.degree.trim() || null,
+      branch: formData.branch.trim() || null,
+      cgpa: formData.cgpa !== '' ? parseFloat(formData.cgpa) : null,
+      cgpaScale: formData.cgpaScale || null,
+      percentage: formData.percentage !== '' ? parseFloat(formData.percentage) : null,
+      activeBacklogs: formData.activeBacklogs !== '' ? parseInt(formData.activeBacklogs, 10) : null,
+      hasBacklogHistory: formData.hasBacklogHistory === 'true' ? true : formData.hasBacklogHistory === 'false' ? false : null,
+      experienceMonths: formData.experienceMonths !== '' ? parseInt(formData.experienceMonths, 10) : null,
+      githubUrl: normalizeUrl(formData.githubUrl),
+      linkedinUrl: normalizeUrl(formData.linkedinUrl),
+      portfolioUrl: normalizeUrl(formData.portfolioUrl),
+    };
+
     try {
-      await fetchApi('/profile', {
-        method: hasExistingProfile ? 'PUT' : 'POST',
-        body: JSON.stringify({
-          fullName: formData.fullName.trim(),
-          university: formData.university.trim() || null,
-          graduationYear: formData.graduationYear ? parseInt(formData.graduationYear, 10) : null,
-          targetRole: formData.targetRole.trim() || null,
-          degree: formData.degree.trim() || null,
-          branch: formData.branch.trim() || null,
-          cgpa: formData.cgpa !== '' ? parseFloat(formData.cgpa) : null,
-          cgpaScale: formData.cgpaScale || null,
-          percentage: formData.percentage !== '' ? parseFloat(formData.percentage) : null,
-          activeBacklogs: formData.activeBacklogs !== '' ? parseInt(formData.activeBacklogs, 10) : null,
-          hasBacklogHistory: formData.hasBacklogHistory === 'true' ? true : formData.hasBacklogHistory === 'false' ? false : null,
-          experienceMonths: formData.experienceMonths !== '' ? parseInt(formData.experienceMonths, 10) : null,
-          githubUrl: formData.githubUrl.trim() || null,
-          linkedinUrl: formData.linkedinUrl.trim() || null,
-          portfolioUrl: formData.portfolioUrl.trim() || null,
-        }),
-      });
-      router.push('/portal');
+      let saveRes: ProfileResponse;
+      try {
+        saveRes = await fetchApi<ProfileResponse>('/profile', {
+          method: hasExistingProfile ? 'PUT' : 'POST',
+          body: JSON.stringify(payload),
+        });
+      } catch (err: unknown) {
+        // Auto-recovery: If client thought profile was new but DB already had one, retry via PUT
+        if (err instanceof ApiError && err.code === 'PROFILE_EXISTS') {
+          setHasExistingProfile(true);
+          saveRes = await fetchApi<ProfileResponse>('/profile', {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+          });
+        } else if (err instanceof ApiError && err.code === 'USER_NOT_MAPPED') {
+          router.replace('/sync-profile');
+          return;
+        } else {
+          throw err;
+        }
+      }
+
+      if (saveRes?.profileComplete) {
+        setHasExistingProfile(true);
+        router.push('/portal');
+      } else {
+        setError('Profile was saved, but Full Name, University, and Target Role are required to complete onboarding.');
+        setSubmitting(false);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save profile. Please try again.');
       setSubmitting(false);
@@ -313,11 +387,13 @@ export default function OnboardingPage() {
                   </div>
 
                   <Input 
-                    label="University / College (Optional)" 
+                    label="University / College" 
                     name="university" 
                     value={formData.university} 
                     onChange={handleChange} 
                     placeholder="e.g. Stanford University or IIT Bombay" 
+                    error={errors.university}
+                    required
                   />
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
@@ -471,6 +547,8 @@ export default function OnboardingPage() {
                       value={formData.targetRole} 
                       onChange={handleChange} 
                       placeholder="e.g. Software Engineer" 
+                      error={errors.targetRole}
+                      required
                     />
                     <datalist id="roles-list">
                       {ROLES.map(role => <option key={role} value={role} />)}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { fetchApi } from '../../../lib/api';
+import { fetchApi, ApiError } from '../../../lib/api';
 import { Card, CardHeader, CardBody } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
@@ -42,8 +42,14 @@ export default function ProfilePage() {
       try {
         userData = await fetchApi<User>('/auth/me');
         if (!cancelled) setUser(userData);
-      } catch {
-        if (!cancelled) router.replace('/login');
+      } catch (err: unknown) {
+        if (!cancelled) {
+          if (err instanceof ApiError && err.code === 'USER_NOT_MAPPED') {
+            router.replace('/sync-profile');
+          } else {
+            router.replace('/login');
+          }
+        }
         return;
       }
 

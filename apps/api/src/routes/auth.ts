@@ -59,6 +59,7 @@ router.post('/sync', clerkRequireAuth(), async (req: Request, res: Response) => 
       }
     }
 
+    res.setHeader('Cache-Control', 'no-store');
     res.json({
       id: user.id,
       email: user.email,
@@ -101,6 +102,7 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    res.setHeader('Cache-Control', 'no-store');
     res.json({
       id: user.id,
       email: user.email,

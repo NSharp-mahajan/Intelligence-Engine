@@ -37,23 +37,55 @@ function isErrorResponse(value: unknown): value is ErrorResponse {
   return typeof value === 'object' && value !== null;
 }
 
-export async function fetchApi<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const headers = new Headers(options.headers);
-  headers.set('Content-Type', 'application/json');
+async function resolveClerkToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
 
-  if (typeof window !== 'undefined') {
-    const clerk = window.Clerk;
-    if (clerk && clerk.session) {
+  const clerk = window.Clerk;
+  if (!clerk) return null;
+
+  // Fast path: session is already available
+  if (clerk.session) {
+    try {
+      const token = await clerk.session.getToken();
+      if (token) return token;
+    } catch {
+      // Fall through to bounded retry
+    }
+  }
+
+  // Bounded poll for session hydration (up to 4 checks x 100ms = 400ms max)
+  // Avoids firing unauthenticated requests during immediate post-login hydration
+  for (let i = 0; i < 4; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const activeClerk = window.Clerk;
+    if (activeClerk?.session) {
       try {
-        const token = await clerk.session.getToken();
-        if (token) headers.set('Authorization', `Bearer ${token}`);
-      } catch (e) {
-        console.warn('Failed to get Clerk token', e);
+        const token = await activeClerk.session.getToken();
+        if (token) return token;
+      } catch {
+        return null;
       }
     }
   }
 
+  return null;
+}
+
+export async function fetchApi<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const headers = new Headers(options.headers);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (typeof window !== 'undefined' && !headers.has('Authorization')) {
+    const token = await resolveClerkToken();
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+  }
+
   const res = await fetch(`${API_URL}${endpoint}`, {
+    cache: 'no-store',
     ...options,
     headers,
     credentials: 'include',

@@ -14,8 +14,12 @@ import dashboardRoutes from './routes/dashboard';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const rawFrontendUrl = process.env.FRONTEND_URL?.trim();
+const normalizedFrontendUrl = rawFrontendUrl ? rawFrontendUrl.replace(/\/+$/, '') : undefined;
+
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
+  rawFrontendUrl,
+  normalizedFrontendUrl,
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:3002',
@@ -27,8 +31,10 @@ const allowedOrigins = [
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
+    const normalizedOrigin = origin.replace(/\/+$/, '');
     if (
       allowedOrigins.includes(origin) ||
+      allowedOrigins.includes(normalizedOrigin) ||
       /^http:\/\/localhost:\d+$/.test(origin) ||
       /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)
     ) {
@@ -38,6 +44,21 @@ app.use(cors({
   },
   credentials: true,
 }));
+
+// Prevent proxy and browser caching of sensitive auth, profile, and dashboard state
+app.use((req, res, next) => {
+  if (
+    req.path.startsWith('/api/auth') ||
+    req.path.startsWith('/api/profile') ||
+    req.path.startsWith('/api/dashboard')
+  ) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
+
 app.use(express.json());
 app.use(cookieParser());
 // Register Clerk before any route calls getAuth() or requireAuth().
