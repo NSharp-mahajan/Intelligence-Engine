@@ -12,21 +12,24 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
     return next();
   }
   try {
-    let auth = req.auth;
-    if (!auth) {
-      try {
-        auth = getAuth(req);
-      } catch {
-        auth = undefined;
+    let clerkUserId: string | undefined;
+    try {
+      const auth = getAuth(req);
+      clerkUserId = auth?.userId ?? undefined;
+    } catch {
+      // In mock test environments where clerkMiddleware was not run, fallback to mock properties
+      if (typeof req.auth === 'object' && req.auth && 'userId' in req.auth) {
+        clerkUserId = (req.auth as { userId?: string }).userId;
       }
     }
-    if (!auth || !auth.userId) {
+
+    if (!clerkUserId) {
       res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } });
       return;
     }
 
     const user = await prisma.user.findUnique({
-      where: { clerkId: auth.userId },
+      where: { clerkId: clerkUserId },
     });
 
     if (!user) {
