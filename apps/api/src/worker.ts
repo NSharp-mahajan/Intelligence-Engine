@@ -104,7 +104,7 @@ async function main() {
     ...baseConfig,
     ...(providerOverride ? { providers: providerOverride } : {}),
     ...(intervalOverride ? { intervalMinutes: intervalOverride } : {}),
-    ...(limitOverride !== undefined ? { maxJobsPerBoard: limitOverride } : {}),
+    ...(limitOverride !== undefined ? { maxJobsPerBoard: limitOverride, jobicyCount: limitOverride } : {}),
     ...(scanLimitOverride !== undefined ? { maxScanLimit: scanLimitOverride } : {}),
   };
 

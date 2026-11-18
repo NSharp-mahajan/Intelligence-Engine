@@ -167,7 +167,7 @@ export function loadIngestionConfigFromEnv(): IngestionConfig {
 
   const maxJobsPerBoard = process.env.INGESTION_MAX_JOBS_PER_BOARD
     ? parseInt(process.env.INGESTION_MAX_JOBS_PER_BOARD, 10)
-    : 25;
+    : undefined;
 
   const maxScanLimit = process.env.INGESTION_MAX_SCAN_LIMIT
     ? parseInt(process.env.INGESTION_MAX_SCAN_LIMIT, 10)
@@ -181,7 +181,7 @@ export function loadIngestionConfigFromEnv(): IngestionConfig {
     retryDelayMs: isNaN(retryDelayMs) || retryDelayMs < 100 ? 1000 : retryDelayMs,
     timeoutMs: isNaN(timeoutMs) || timeoutMs < 1000 ? 30000 : timeoutMs,
     jobicyCount: isNaN(jobicyCount) || jobicyCount < 1 ? 50 : jobicyCount,
-    maxJobsPerBoard: maxJobsPerBoard && !isNaN(maxJobsPerBoard) ? maxJobsPerBoard : 25,
+    maxJobsPerBoard: maxJobsPerBoard && !isNaN(maxJobsPerBoard) ? maxJobsPerBoard : undefined,
     maxScanLimit: maxScanLimit && !isNaN(maxScanLimit) ? maxScanLimit : 500,
     greenhouseBoards: parseGreenhouseBoardsFromEnv(process.env.GREENHOUSE_BOARDS),
     leverBoards: parseLeverBoardsFromEnv(process.env.LEVER_BOARDS),
@@ -285,6 +285,7 @@ export class IngestionScheduler {
   ): Promise<{ stats: { created: number; updated: number; skipped: number; errors: number }; attempts: number; error?: Error }> {
     let lastError: Error | undefined;
     let attempts = 0;
+    let lastStats = { created: 0, updated: 0, skipped: 0, errors: 1 };
 
     while (attempts <= this.config.maxRetries) {
       attempts++;
@@ -298,6 +299,11 @@ export class IngestionScheduler {
 
       try {
         const stats = await this.ingestor.ingest(provider, abortController.signal);
+        lastStats = stats;
+        // If all opportunities failed to save (0 created, 0 updated, >0 errors), treat as persistence failure for retry
+        if (stats.errors > 0 && stats.created === 0 && stats.updated === 0) {
+          throw new Error(`Persistence failure: all ${stats.errors} opportunities failed to save`);
+        }
         return { stats, attempts };
       } catch (err) {
         if (isTimedOut) {
@@ -317,7 +323,7 @@ export class IngestionScheduler {
     }
 
     return {
-      stats: { created: 0, updated: 0, skipped: 0, errors: 1 },
+      stats: lastStats,
       attempts,
       error: lastError,
     };
@@ -422,8 +428,11 @@ export class IngestionScheduler {
         const failedSources = fetchStats?.failedSources;
         const partialSources = fetchStats?.partialSources;
 
-        if (error) {
+        const isTotalPersistenceFailure = !error && stats.errors > 0 && stats.created === 0 && stats.updated === 0;
+
+        if (error || isTotalPersistenceFailure) {
           failureCount++;
+          const effectiveError = error ? error.message : `Persistence failure: all ${stats.errors} opportunities failed to save`;
           providerResults[providerName] = {
             provider: providerInstance.name,
             status: 'FAILED',
@@ -433,11 +442,11 @@ export class IngestionScheduler {
             errors: stats.errors,
             durationMs,
             attempts,
-            error: error.message,
+            error: effectiveError,
             ...(failedSources && failedSources.length > 0 ? { failedSources } : {}),
             ...(partialSources && partialSources.length > 0 ? { partialSources } : {}),
           };
-          console.error(`[IngestionScheduler] Provider "${providerInstance.name}" FAILED after ${attempts} attempts: ${error.message}`);
+          console.error(`[IngestionScheduler] Provider "${providerInstance.name}" FAILED (created=${stats.created}, updated=${stats.updated}, skipped=${stats.skipped}, errors=${stats.errors}): ${effectiveError}`);
         } else {
           successCount++;
           providerResults[providerName] = {
@@ -458,7 +467,7 @@ export class IngestionScheduler {
               failedSources,
             );
           }
-          console.log(`[IngestionScheduler] Provider "${providerInstance.name}" finished in ${durationMs}ms: created=${stats.created}, updated=${stats.updated}, skipped=${stats.skipped}`);
+          console.log(`[IngestionScheduler] Provider "${providerInstance.name}" finished in ${durationMs}ms: created=${stats.created}, updated=${stats.updated}, skipped=${stats.skipped}, errors=${stats.errors}`);
         }
       }
 
@@ -466,9 +475,10 @@ export class IngestionScheduler {
       const totalDuration = endedAt.getTime() - startedAt.getTime();
 
       let overallStatus: IngestionRunStatus;
-      if (failureCount === 0 && successCount > 0) {
+      const anyErrors = totals.errors > 0;
+      if (failureCount === 0 && successCount > 0 && !anyErrors) {
         overallStatus = 'SUCCESS';
-      } else if (successCount > 0 && failureCount > 0) {
+      } else if (successCount > 0 && (failureCount > 0 || anyErrors)) {
         overallStatus = 'PARTIAL_FAILURE';
       } else {
         overallStatus = 'FAILED';

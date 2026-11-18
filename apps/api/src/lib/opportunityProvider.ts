@@ -546,203 +546,155 @@ export class OpportunityIngestor {
         const normalized = this.normalizer.normalize(job);
         const now = new Date();
 
+        // Pre-resolve skills outside the interactive transaction to keep the transaction
+        // as short as possible and prevent concurrent P2002 errors from aborting PostgreSQL transactions.
+        const hasSkills = (normalized.requiredSkills && normalized.requiredSkills.length > 0) ||
+                          (normalized.preferredSkills && normalized.preferredSkills.length > 0);
+        let resolvedSkills: { reqSkillIds: string[]; prefSkillIds: string[] } = { reqSkillIds: [], prefSkillIds: [] };
+        if (hasSkills) {
+          resolvedSkills = await this.resolveSkillIds(
+            this.prisma,
+            normalized.requiredSkills,
+            normalized.preferredSkills,
+          );
+        }
+
         const existingId = await this.deduplicator.findExisting(this.prisma, normalized);
 
         if (existingId) {
-          await this.prisma.$transaction(async (tx) => {
-            const existing = await tx.opportunity.findUnique({
-              where: { id: existingId },
-            });
-
-            if (existing) {
-              await tx.opportunity.update({
+          await this.prisma.$transaction(
+            async (tx) => {
+              const existing = await tx.opportunity.findUnique({
                 where: { id: existingId },
-                data: {
-                  title: normalized.title,
-                  organization: normalized.organization,
-                  description: normalized.description,
-                  type: normalized.type !== OpportunityType.JOB ? normalized.type : existing.type,
-                  location: normalized.location !== null ? normalized.location : existing.location,
-                  workMode: normalized.workMode !== WorkMode.UNKNOWN ? normalized.workMode : existing.workMode,
-                  employmentType: normalized.employmentType !== EmploymentType.UNKNOWN ? normalized.employmentType : existing.employmentType,
-                  experienceLevel: normalized.experienceLevel !== ExperienceLevel.UNKNOWN ? normalized.experienceLevel : existing.experienceLevel,
-                  applicationUrl: normalized.applicationUrl,
-                  sourceUrl: normalized.sourceUrl !== null ? normalized.sourceUrl : existing.sourceUrl,
-                  postedDate: normalized.postedDate !== null ? normalized.postedDate : existing.postedDate,
-                  deadline: normalized.deadline !== null ? normalized.deadline : existing.deadline,
-                  lastSeenAt: now,
-                  updatedAt: now,
-                },
               });
 
-              // Refresh OpportunitySkill relations when source requirements are provided
-              const hasSkills = (normalized.requiredSkills && normalized.requiredSkills.length > 0) ||
-                                (normalized.preferredSkills && normalized.preferredSkills.length > 0);
-
-              if (hasSkills) {
-                await tx.opportunitySkill.deleteMany({
-                  where: { opportunityId: existingId },
+              if (existing) {
+                await tx.opportunity.update({
+                  where: { id: existingId },
+                  data: {
+                    title: normalized.title,
+                    organization: normalized.organization,
+                    description: normalized.description,
+                    type: normalized.type !== OpportunityType.JOB ? normalized.type : existing.type,
+                    location: normalized.location !== null ? normalized.location : existing.location,
+                    workMode: normalized.workMode !== WorkMode.UNKNOWN ? normalized.workMode : existing.workMode,
+                    employmentType: normalized.employmentType !== EmploymentType.UNKNOWN ? normalized.employmentType : existing.employmentType,
+                    experienceLevel: normalized.experienceLevel !== ExperienceLevel.UNKNOWN ? normalized.experienceLevel : existing.experienceLevel,
+                    applicationUrl: normalized.applicationUrl,
+                    sourceUrl: normalized.sourceUrl !== null ? normalized.sourceUrl : existing.sourceUrl,
+                    postedDate: normalized.postedDate !== null ? normalized.postedDate : existing.postedDate,
+                    deadline: normalized.deadline !== null ? normalized.deadline : existing.deadline,
+                    lastSeenAt: now,
+                    updatedAt: now,
+                  },
                 });
 
-                const reqSkillIds: string[] = [];
-                for (const skillName of normalized.requiredSkills) {
-                  const skill = await tx.skill.upsert({
-                    where: { name: skillName },
-                    update: {},
-                    create: {
-                      id: randomUUID(),
-                      name: skillName,
-                      category: 'TOOL',
-                    },
+                // Refresh OpportunitySkill relations when source requirements are provided
+                if (hasSkills) {
+                  await tx.opportunitySkill.deleteMany({
+                    where: { opportunityId: existingId },
                   });
-                  if (!reqSkillIds.includes(skill.id)) {
-                    reqSkillIds.push(skill.id);
-                  }
-                }
 
-                for (const skillId of reqSkillIds) {
-                  await tx.opportunitySkill.create({
-                    data: {
+                  const oppSkillsToCreate = [
+                    ...resolvedSkills.reqSkillIds.map((skillId: string) => ({
                       opportunityId: existingId,
                       skillId,
                       requirementType: RequirementType.REQUIRED,
-                    },
-                  });
-                }
-
-                const prefSkillIds: string[] = [];
-                for (const skillName of normalized.preferredSkills) {
-                  const skill = await tx.skill.upsert({
-                    where: { name: skillName },
-                    update: {},
-                    create: {
-                      id: randomUUID(),
-                      name: skillName,
-                      category: 'TOOL',
-                    },
-                  });
-                  if (!prefSkillIds.includes(skill.id) && !reqSkillIds.includes(skill.id)) {
-                    prefSkillIds.push(skill.id);
-                  }
-                }
-
-                for (const skillId of prefSkillIds) {
-                  await tx.opportunitySkill.create({
-                    data: {
+                    })),
+                    ...resolvedSkills.prefSkillIds.map((skillId: string) => ({
                       opportunityId: existingId,
                       skillId,
                       requirementType: RequirementType.PREFERRED,
-                    },
-                  });
+                    })),
+                  ];
+
+                  if (oppSkillsToCreate.length > 0) {
+                    await tx.opportunitySkill.createMany({
+                      data: oppSkillsToCreate,
+                    });
+                  }
+                }
+
+                // Persist Early Career Classification if available
+                if (normalized.earlyCareerClassification) {
+                  const sourceContentHash = this.normalizer.computeClassificationCacheKey(job);
+                  await this.persistEligibility(
+                    tx,
+                    existingId,
+                    normalized.earlyCareerClassification,
+                    sourceContentHash,
+                    now
+                  );
                 }
               }
-
-              // Persist Early Career Classification if available
-              if (normalized.earlyCareerClassification) {
-                const sourceContentHash = this.normalizer.computeClassificationCacheKey(job);
-                await this.persistEligibility(
-                  tx,
-                  existingId,
-                  normalized.earlyCareerClassification,
-                  sourceContentHash,
-                  now
-                );
-              }
-            }
-          });
+            },
+            { timeout: 20000, maxWait: 10000 },
+          );
 
           updated++;
           skipped++;
           continue;
         }
 
-        await this.prisma.$transaction(async (tx) => {
-          const opportunity = await tx.opportunity.create({
-            data: {
-              id: randomUUID(),
-              title: normalized.title,
-              organization: normalized.organization,
-              description: normalized.description,
-              type: normalized.type,
-              location: normalized.location,
-              workMode: normalized.workMode,
-              employmentType: normalized.employmentType,
-              experienceLevel: normalized.experienceLevel,
-              applicationUrl: normalized.applicationUrl,
-              source: normalized.source,
-              sourceUrl: normalized.sourceUrl,
-              sourceJobId: normalized.sourceJobId,
-              postedDate: normalized.postedDate,
-              deadline: normalized.deadline,
-              lastSeenAt: now,
-              updatedAt: now,
-            },
-          });
-
-          const createdReqSkillIds: string[] = [];
-          for (const skillName of normalized.requiredSkills) {
-            const skill = await tx.skill.upsert({
-              where: { name: skillName },
-              update: {},
-              create: {
-                id: randomUUID(),
-                name: skillName,
-                category: 'TOOL',
-              },
-            });
-            if (!createdReqSkillIds.includes(skill.id)) {
-              createdReqSkillIds.push(skill.id);
-            }
-          }
-
-          for (const skillId of createdReqSkillIds) {
-            await tx.opportunitySkill.create({
+        await this.prisma.$transaction(
+          async (tx) => {
+            const opportunity = await tx.opportunity.create({
               data: {
-                opportunityId: opportunity.id,
-                skillId,
-                requirementType: RequirementType.REQUIRED,
-              },
-            });
-          }
-
-          const createdPrefSkillIds: string[] = [];
-          for (const skillName of normalized.preferredSkills) {
-            const skill = await tx.skill.upsert({
-              where: { name: skillName },
-              update: {},
-              create: {
                 id: randomUUID(),
-                name: skillName,
-                category: 'TOOL',
+                title: normalized.title,
+                organization: normalized.organization,
+                description: normalized.description,
+                type: normalized.type,
+                location: normalized.location,
+                workMode: normalized.workMode,
+                employmentType: normalized.employmentType,
+                experienceLevel: normalized.experienceLevel,
+                applicationUrl: normalized.applicationUrl,
+                source: normalized.source,
+                sourceUrl: normalized.sourceUrl,
+                sourceJobId: normalized.sourceJobId,
+                postedDate: normalized.postedDate,
+                deadline: normalized.deadline,
+                lastSeenAt: now,
+                updatedAt: now,
               },
             });
-            if (!createdPrefSkillIds.includes(skill.id) && !createdReqSkillIds.includes(skill.id)) {
-              createdPrefSkillIds.push(skill.id);
+
+            if (hasSkills) {
+              const oppSkillsToCreate = [
+                ...resolvedSkills.reqSkillIds.map((skillId: string) => ({
+                  opportunityId: opportunity.id,
+                  skillId,
+                  requirementType: RequirementType.REQUIRED,
+                })),
+                ...resolvedSkills.prefSkillIds.map((skillId: string) => ({
+                  opportunityId: opportunity.id,
+                  skillId,
+                  requirementType: RequirementType.PREFERRED,
+                })),
+              ];
+
+              if (oppSkillsToCreate.length > 0) {
+                await tx.opportunitySkill.createMany({
+                  data: oppSkillsToCreate,
+                });
+              }
             }
-          }
 
-          for (const skillId of createdPrefSkillIds) {
-            await tx.opportunitySkill.create({
-              data: {
-                opportunityId: opportunity.id,
-                skillId,
-                requirementType: RequirementType.PREFERRED,
-              },
-            });
-          }
-
-          // Persist Early Career Classification if available
-          if (normalized.earlyCareerClassification) {
-            const sourceContentHash = this.normalizer.computeClassificationCacheKey(job);
-            await this.persistEligibility(
-              tx,
-              opportunity.id,
-              normalized.earlyCareerClassification,
-              sourceContentHash,
-              now
-            );
-          }
-        });
+            // Persist Early Career Classification if available
+            if (normalized.earlyCareerClassification) {
+              const sourceContentHash = this.normalizer.computeClassificationCacheKey(job);
+              await this.persistEligibility(
+                tx,
+                opportunity.id,
+                normalized.earlyCareerClassification,
+                sourceContentHash,
+                now
+              );
+            }
+          },
+          { timeout: 20000, maxWait: 10000 },
+        );
 
         created++;
       } catch (error) {
@@ -755,6 +707,92 @@ export class OpportunityIngestor {
     }
 
     return { created, updated, skipped, errors };
+  }
+
+  /**
+   * Resolves skill names to their database IDs in bulk.
+   * - Normalizes names (trim, lowercase).
+   * - Bulk-queries existing skills in 1 round trip via findMany.
+   * - Creates genuinely missing skills safely (handling concurrent insertion races).
+   * - Deduplicates required and preferred skill IDs (ensuring required takes precedence and sets are disjoint).
+   */
+  private async resolveSkillIds(
+    clientOrTx: any = this.prisma,
+    requiredSkills: string[] = [],
+    preferredSkills: string[] = []
+  ): Promise<{ reqSkillIds: string[]; prefSkillIds: string[] }> {
+    const normalize = (name: string) => name.trim().toLowerCase();
+
+    // 1. Clean and deduplicate skill names
+    const reqClean = Array.from(new Set(requiredSkills.map(normalize).filter(Boolean)));
+    const prefClean = Array.from(new Set(preferredSkills.map(normalize).filter(Boolean)));
+
+    // Ensure required takes precedence over preferred (disjoint sets)
+    const prefFiltered = prefClean.filter((name) => !reqClean.includes(name));
+
+    const allNames = Array.from(new Set([...reqClean, ...prefFiltered]));
+    if (allNames.length === 0) {
+      return { reqSkillIds: [], prefSkillIds: [] };
+    }
+
+    // 2. Bulk query existing skills
+    const existingSkills: Array<{ id: string; name: string }> = await clientOrTx.skill.findMany({
+      where: { name: { in: allNames } },
+      select: { id: true, name: true },
+    });
+
+    const skillMap = new Map<string, string>();
+    for (const skill of existingSkills) {
+      skillMap.set(skill.name.toLowerCase(), skill.id);
+    }
+
+    // 3. Create missing skills safely
+    const missingNames = allNames.filter((name) => !skillMap.has(name));
+    for (const missingName of missingNames) {
+      try {
+        const created = await clientOrTx.skill.create({
+          data: {
+            id: randomUUID(),
+            name: missingName,
+            category: 'TOOL',
+          },
+          select: { id: true, name: true },
+        });
+        skillMap.set(missingName, created.id);
+      } catch (err: any) {
+        // Handle concurrent race where another process created the skill
+        if (err?.code === 'P2002' || err?.message?.includes('Unique constraint')) {
+          const found = await clientOrTx.skill.findUnique({
+            where: { name: missingName },
+            select: { id: true, name: true },
+          });
+          if (found) {
+            skillMap.set(missingName, found.id);
+          }
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    // 4. Map back to disjoint, deduplicated ID lists
+    const reqSkillIds: string[] = [];
+    for (const name of reqClean) {
+      const id = skillMap.get(name);
+      if (id && !reqSkillIds.includes(id)) {
+        reqSkillIds.push(id);
+      }
+    }
+
+    const prefSkillIds: string[] = [];
+    for (const name of prefFiltered) {
+      const id = skillMap.get(name);
+      if (id && !reqSkillIds.includes(id) && !prefSkillIds.includes(id)) {
+        prefSkillIds.push(id);
+      }
+    }
+
+    return { reqSkillIds, prefSkillIds };
   }
 
   /**
@@ -893,27 +931,29 @@ export class OpportunityIngestor {
         },
       });
 
-      // Insert Initial Active Evidence Records
+      // Insert Initial Active Evidence Records in bulk
       const activeEvidenceList = consolidateEvidenceByCriterion(classification.evidenceRecords);
-      for (const ev of activeEvidenceList) {
-        await tx.opportunityEligibilityEvidence.create({
-          data: {
-            id: randomUUID(),
-            eligibilityId,
-            criterion: ev.criterion,
-            rawValue: ev.rawValue,
-            normalizedValue: ev.normalizedValue,
-            confidence: ev.confidence,
-            verificationLevel: ev.verificationLevel,
-            extractionMethod: ev.extractionMethod,
-            sourceField: ev.sourceField,
-            hasConflict: ev.hasConflict,
-            conflictReason: ev.conflictReason ?? null,
-            sourceContentHash,
-            extractorVersion: classifierVersion,
-            isActive: true,
-            createdAt: now,
-          },
+      if (activeEvidenceList.length > 0) {
+        const evidenceRows = activeEvidenceList.map((ev) => ({
+          id: randomUUID(),
+          eligibilityId,
+          criterion: ev.criterion,
+          rawValue: ev.rawValue ?? '',
+          normalizedValue: ev.normalizedValue ?? {},
+          confidence: ev.confidence,
+          verificationLevel: ev.verificationLevel,
+          extractionMethod: ev.extractionMethod,
+          sourceField: ev.sourceField,
+          hasConflict: Boolean(ev.hasConflict),
+          conflictReason: ev.conflictReason ?? null,
+          sourceContentHash,
+          extractorVersion: classifierVersion,
+          isActive: true,
+          createdAt: now,
+        }));
+
+        await tx.opportunityEligibilityEvidence.createMany({
+          data: evidenceRows,
         });
       }
       return;
@@ -950,46 +990,78 @@ export class OpportunityIngestor {
       oldByCriterion.set(oldEv.criterion, oldEv);
     }
 
-    // Insert new active evidence records and link supersession
+    // Insert new active evidence records in bulk and link supersession
     const updatedEvidenceList = consolidateEvidenceByCriterion(classification.evidenceRecords);
+    const newEvidenceRows: Array<{
+      id: string;
+      eligibilityId: string;
+      criterion: any;
+      rawValue: string;
+      normalizedValue: any;
+      confidence: number;
+      verificationLevel: any;
+      extractionMethod: any;
+      sourceField: string;
+      hasConflict: boolean;
+      conflictReason: string | null;
+      sourceContentHash: string;
+      extractorVersion: string;
+      isActive: boolean;
+      createdAt: Date;
+    }> = [];
+
+    const supersessionUpdates: Array<{ oldId: string; newId: string; nextVerification: any }> = [];
+
     for (const ev of updatedEvidenceList) {
       const newEvidenceId = randomUUID();
       const oldEv = oldByCriterion.get(ev.criterion);
 
-      await tx.opportunityEligibilityEvidence.create({
-        data: {
-          id: newEvidenceId,
-          eligibilityId: existingEligibility.id,
-          criterion: ev.criterion,
-          rawValue: ev.rawValue,
-          normalizedValue: ev.normalizedValue,
-          confidence: ev.confidence,
-          verificationLevel: ev.verificationLevel,
-          extractionMethod: ev.extractionMethod,
-          sourceField: ev.sourceField,
-          hasConflict: ev.hasConflict,
-          conflictReason: ev.conflictReason ?? null,
-          sourceContentHash,
-          extractorVersion: classifierVersion,
-          isActive: true,
-          createdAt: now,
-        },
+      newEvidenceRows.push({
+        id: newEvidenceId,
+        eligibilityId: existingEligibility.id,
+        criterion: ev.criterion,
+        rawValue: ev.rawValue ?? '',
+        normalizedValue: ev.normalizedValue ?? {},
+        confidence: ev.confidence,
+        verificationLevel: ev.verificationLevel,
+        extractionMethod: ev.extractionMethod,
+        sourceField: ev.sourceField,
+        hasConflict: Boolean(ev.hasConflict),
+        conflictReason: ev.conflictReason ?? null,
+        sourceContentHash,
+        extractorVersion: classifierVersion,
+        isActive: true,
+        createdAt: now,
       });
 
       if (oldEv) {
         const nextVerification =
           oldEv.verificationLevel === 'MANUALLY_AUDITED' ? 'REVIEW_REQUIRED' : oldEv.verificationLevel;
-        await tx.opportunityEligibilityEvidence.update({
-          where: { id: oldEv.id },
-          data: {
-            isActive: false,
-            supersededAt: now,
-            supersededById: newEvidenceId,
-            verificationLevel: nextVerification,
-          },
+        supersessionUpdates.push({
+          oldId: oldEv.id,
+          newId: newEvidenceId,
+          nextVerification,
         });
         oldByCriterion.delete(ev.criterion);
       }
+    }
+
+    if (newEvidenceRows.length > 0) {
+      await tx.opportunityEligibilityEvidence.createMany({
+        data: newEvidenceRows,
+      });
+    }
+
+    for (const update of supersessionUpdates) {
+      await tx.opportunityEligibilityEvidence.update({
+        where: { id: update.oldId },
+        data: {
+          isActive: false,
+          supersededAt: now,
+          supersededById: update.newId,
+          verificationLevel: update.nextVerification,
+        },
+      });
     }
 
     // Supersede any remaining active evidence whose criterion is not present in new extraction
