@@ -609,9 +609,15 @@ export class OpportunityIngestor {
                   ];
 
                   if (oppSkillsToCreate.length > 0) {
-                    await tx.opportunitySkill.createMany({
-                      data: oppSkillsToCreate,
-                    });
+                    if (tx.opportunitySkill.createMany) {
+                      await tx.opportunitySkill.createMany({
+                        data: oppSkillsToCreate,
+                      });
+                    } else {
+                      for (const row of oppSkillsToCreate) {
+                        await tx.opportunitySkill.create({ data: row });
+                      }
+                    }
                   }
                 }
 
@@ -675,9 +681,15 @@ export class OpportunityIngestor {
               ];
 
               if (oppSkillsToCreate.length > 0) {
-                await tx.opportunitySkill.createMany({
-                  data: oppSkillsToCreate,
-                });
+                if (tx.opportunitySkill.createMany) {
+                  await tx.opportunitySkill.createMany({
+                    data: oppSkillsToCreate,
+                  });
+                } else {
+                  for (const row of oppSkillsToCreate) {
+                    await tx.opportunitySkill.create({ data: row });
+                  }
+                }
               }
             }
 
@@ -934,27 +946,41 @@ export class OpportunityIngestor {
       // Insert Initial Active Evidence Records in bulk
       const activeEvidenceList = consolidateEvidenceByCriterion(classification.evidenceRecords);
       if (activeEvidenceList.length > 0) {
-        const evidenceRows = activeEvidenceList.map((ev) => ({
-          id: randomUUID(),
-          eligibilityId,
-          criterion: ev.criterion,
-          rawValue: ev.rawValue ?? '',
-          normalizedValue: ev.normalizedValue ?? {},
-          confidence: ev.confidence,
-          verificationLevel: ev.verificationLevel,
-          extractionMethod: ev.extractionMethod,
-          sourceField: ev.sourceField,
-          hasConflict: Boolean(ev.hasConflict),
-          conflictReason: ev.conflictReason ?? null,
-          sourceContentHash,
-          extractorVersion: classifierVersion,
-          isActive: true,
-          createdAt: now,
-        }));
+        const seenInitial = new Set<string>();
+        const evidenceRows: any[] = [];
+        for (const ev of activeEvidenceList) {
+          if (seenInitial.has(ev.criterion)) continue;
+          seenInitial.add(ev.criterion);
+          evidenceRows.push({
+            id: randomUUID(),
+            eligibilityId,
+            criterion: ev.criterion,
+            rawValue: ev.rawValue ?? '',
+            normalizedValue: ev.normalizedValue ?? {},
+            confidence: ev.confidence,
+            verificationLevel: ev.verificationLevel,
+            extractionMethod: ev.extractionMethod,
+            sourceField: ev.sourceField,
+            hasConflict: Boolean(ev.hasConflict),
+            conflictReason: ev.conflictReason ?? null,
+            sourceContentHash,
+            extractorVersion: classifierVersion,
+            isActive: true,
+            createdAt: now,
+          });
+        }
 
-        await tx.opportunityEligibilityEvidence.createMany({
-          data: evidenceRows,
-        });
+        if (evidenceRows.length > 0) {
+          if (tx.opportunityEligibilityEvidence.createMany) {
+            await tx.opportunityEligibilityEvidence.createMany({
+              data: evidenceRows,
+            });
+          } else {
+            for (const row of evidenceRows) {
+              await tx.opportunityEligibilityEvidence.create({ data: row });
+            }
+          }
+        }
       }
       return;
     }
@@ -985,12 +1011,14 @@ export class OpportunityIngestor {
       },
     });
 
-    const oldByCriterion = new Map<string, typeof activeEvidences[0]>();
+    const oldByCriterion = new Map<string, Array<{ id: string; criterion: string; verificationLevel: string }>>();
     for (const oldEv of activeEvidences) {
-      oldByCriterion.set(oldEv.criterion, oldEv);
+      const list = oldByCriterion.get(oldEv.criterion) || [];
+      list.push(oldEv);
+      oldByCriterion.set(oldEv.criterion, list);
     }
 
-    // Insert new active evidence records in bulk and link supersession
+    // Prepare new active evidence records in bulk and link supersession
     const updatedEvidenceList = consolidateEvidenceByCriterion(classification.evidenceRecords);
     const newEvidenceRows: Array<{
       id: string;
@@ -1011,10 +1039,14 @@ export class OpportunityIngestor {
     }> = [];
 
     const supersessionUpdates: Array<{ oldId: string; newId: string; nextVerification: any }> = [];
+    const seenCriteria = new Set<string>();
 
     for (const ev of updatedEvidenceList) {
+      if (seenCriteria.has(ev.criterion)) continue;
+      seenCriteria.add(ev.criterion);
+
       const newEvidenceId = randomUUID();
-      const oldEv = oldByCriterion.get(ev.criterion);
+      const oldEvList = oldByCriterion.get(ev.criterion) || [];
 
       newEvidenceRows.push({
         id: newEvidenceId,
@@ -1034,7 +1066,7 @@ export class OpportunityIngestor {
         createdAt: now,
       });
 
-      if (oldEv) {
+      for (const oldEv of oldEvList) {
         const nextVerification =
           oldEv.verificationLevel === 'MANUALLY_AUDITED' ? 'REVIEW_REQUIRED' : oldEv.verificationLevel;
         supersessionUpdates.push({
@@ -1042,16 +1074,12 @@ export class OpportunityIngestor {
           newId: newEvidenceId,
           nextVerification,
         });
-        oldByCriterion.delete(ev.criterion);
       }
+      oldByCriterion.delete(ev.criterion);
     }
 
-    if (newEvidenceRows.length > 0) {
-      await tx.opportunityEligibilityEvidence.createMany({
-        data: newEvidenceRows,
-      });
-    }
-
+    // 1. Supersede matching old active evidence with links to newEvidenceId BEFORE inserting new active evidence.
+    // This maintains the SQL invariant: exactly one active evidence row per (eligibilityId, criterion).
     for (const update of supersessionUpdates) {
       await tx.opportunityEligibilityEvidence.update({
         where: { id: update.oldId },
@@ -1064,18 +1092,47 @@ export class OpportunityIngestor {
       });
     }
 
-    // Supersede any remaining active evidence whose criterion is not present in new extraction
-    for (const remainingOld of oldByCriterion.values()) {
-      const nextVerification =
-        remainingOld.verificationLevel === 'MANUALLY_AUDITED' ? 'REVIEW_REQUIRED' : remainingOld.verificationLevel;
-      await tx.opportunityEligibilityEvidence.update({
-        where: { id: remainingOld.id },
+    // 2. Supersede any remaining active evidence whose criterion is not present in new extraction
+    for (const remainingOldList of oldByCriterion.values()) {
+      for (const remainingOld of remainingOldList) {
+        const nextVerification =
+          remainingOld.verificationLevel === 'MANUALLY_AUDITED' ? 'REVIEW_REQUIRED' : remainingOld.verificationLevel;
+        await tx.opportunityEligibilityEvidence.update({
+          where: { id: remainingOld.id },
+          data: {
+            isActive: false,
+            supersededAt: now,
+            verificationLevel: nextVerification,
+          },
+        });
+      }
+    }
+
+    // 3. Safety invariant: ensure no dangling active evidence remains for this eligibility before creating new active rows
+    if (tx.opportunityEligibilityEvidence.updateMany) {
+      await tx.opportunityEligibilityEvidence.updateMany({
+        where: {
+          eligibilityId: existingEligibility.id,
+          isActive: true,
+        },
         data: {
           isActive: false,
           supersededAt: now,
-          verificationLevel: nextVerification,
         },
       });
+    }
+
+    // 4. Safely insert new active evidence records in bulk (zero active records exist to conflict with)
+    if (newEvidenceRows.length > 0) {
+      if (tx.opportunityEligibilityEvidence.createMany) {
+        await tx.opportunityEligibilityEvidence.createMany({
+          data: newEvidenceRows,
+        });
+      } else {
+        for (const row of newEvidenceRows) {
+          await tx.opportunityEligibilityEvidence.create({ data: row });
+        }
+      }
     }
 
     // Update OpportunityEligibility to the new classification state

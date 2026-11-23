@@ -326,6 +326,145 @@ async function run() {
     assert.strictEqual(updatedOldIds[0], 'old-ev-1');
   });
 
+  await it('Regression: duplicate incoming evidence for same criterion consolidated to 1 active row', async () => {
+    let insertedRows: any[] = [];
+    const mockTx = {
+      opportunityEligibility: {
+        findUnique: async () => null,
+        create: async () => ({ id: 'elig-dedup' }),
+      },
+      opportunityEligibilityEvidence: {
+        createMany: async (args: any) => {
+          insertedRows = args.data;
+          return { count: args.data.length };
+        },
+      },
+    };
+
+    const duplicateClassification: any = {
+      category: 'INTERNSHIP',
+      confidence: 0.9,
+      overallVerificationLevel: 'AUTOMATED_HIGH_CONFIDENCE',
+      explanation: 'Duplicate test',
+      evidenceRecords: [
+        {
+          criterion: 'ROLE_CATEGORY',
+          rawValue: 'Software Intern',
+          confidence: 0.95,
+          verificationLevel: 'AUTOMATED_HIGH_CONFIDENCE',
+          extractionMethod: 'TITLE_REGEX',
+          sourceField: 'title',
+        },
+        {
+          criterion: 'ROLE_CATEGORY',
+          rawValue: 'Engineering Intern',
+          confidence: 0.90,
+          verificationLevel: 'AUTOMATED_HIGH_CONFIDENCE',
+          extractionMethod: 'DESC_REGEX',
+          sourceField: 'description',
+        },
+      ],
+    };
+
+    await ingestor.persistEligibility(
+      mockTx,
+      'opp-dedup',
+      duplicateClassification,
+      'hash-dedup',
+      new Date()
+    );
+
+    assert.strictEqual(insertedRows.length, 1, 'Only one evidence row created for ROLE_CATEGORY');
+    assert.strictEqual(insertedRows[0].criterion, 'ROLE_CATEGORY');
+    assert.strictEqual(insertedRows[0].isActive, true);
+  });
+
+  await it('Regression: old active evidence deactivated BEFORE inserting new active evidence (idx_single_active_evidence_per_criterion)', async () => {
+    // In-memory table state simulating PostgreSQL partial unique index:
+    // idx_single_active_evidence_per_criterion ON (eligibilityId, criterion) WHERE isActive = true
+    const activeRecords = new Map<string, boolean>([['ROLE_CATEGORY', true]]);
+    const operationOrder: string[] = [];
+
+    const mockTx = {
+      opportunityEligibility: {
+        findUnique: async () => ({
+          id: 'elig-supersede',
+          sourceContentHash: 'old-hash',
+          classifierVersion: 'early-career-v1',
+        }),
+        update: async () => ({}),
+      },
+      opportunityEligibilityEvidence: {
+        findMany: async () => [
+          { id: 'old-ev-role', criterion: 'ROLE_CATEGORY', verificationLevel: 'AUTOMATED_HIGH_CONFIDENCE' },
+        ],
+        update: async (args: any) => {
+          operationOrder.push(`deactivate:${args.where.id}`);
+          if (args.data.isActive === false) {
+            activeRecords.set('ROLE_CATEGORY', false);
+          }
+        },
+        updateMany: async (args: any) => {
+          operationOrder.push('updateMany:deactivate');
+          if (args.data.isActive === false) {
+            activeRecords.set('ROLE_CATEGORY', false);
+          }
+        },
+        createMany: async (args: any) => {
+          operationOrder.push('createMany:newEvidence');
+          for (const row of args.data) {
+            if (row.isActive && activeRecords.get(row.criterion) === true) {
+              const err: any = new Error(
+                'Unique constraint failed on the constraint: idx_single_active_evidence_per_criterion'
+              );
+              err.code = 'P2002';
+              throw err;
+            }
+            if (row.isActive) {
+              activeRecords.set(row.criterion, true);
+            }
+          }
+          return { count: args.data.length };
+        },
+      },
+    };
+
+    const newClassification: any = {
+      category: 'ENTRY_LEVEL',
+      confidence: 0.95,
+      overallVerificationLevel: 'AUTOMATED_HIGH_CONFIDENCE',
+      evidenceRecords: [
+        {
+          criterion: 'ROLE_CATEGORY',
+          rawValue: 'Junior Engineer',
+          confidence: 0.95,
+          verificationLevel: 'AUTOMATED_HIGH_CONFIDENCE',
+          extractionMethod: 'TITLE_REGEX',
+          sourceField: 'title',
+        },
+      ],
+    };
+
+    // This must NOT throw P2002 because old evidence is deactivated before createMany is called
+    await ingestor.persistEligibility(
+      mockTx,
+      'opp-supersede',
+      newClassification,
+      'new-hash',
+      new Date()
+    );
+
+    const deactivateIndex = operationOrder.indexOf('deactivate:old-ev-role');
+    const createIndex = operationOrder.indexOf('createMany:newEvidence');
+    assert.ok(deactivateIndex !== -1, 'Old record was deactivated');
+    assert.ok(createIndex !== -1, 'New record was inserted');
+    assert.ok(
+      deactivateIndex < createIndex,
+      `Deactivation (${deactivateIndex}) must occur before creation (${createIndex})`
+    );
+    assert.strictEqual(activeRecords.get('ROLE_CATEGORY'), true, 'Exactly 1 active record remains');
+  });
+
   // ──────────────────────────────────────────────────────────
   // 3. Transaction Safety Tests
   // ──────────────────────────────────────────────────────────
